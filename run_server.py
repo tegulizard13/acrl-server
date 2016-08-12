@@ -1,6 +1,7 @@
 #/usr/bin/python
  
 from boto.ec2 import connect_to_region
+from httplib import OK
 import logging
 import time
 import sys
@@ -32,20 +33,32 @@ root_logger.addHandler(ch)
 
 
 class ACRLServer(object):
-    def __init__(self, access_key_id, secret_access_key, region, instance_id):
+    def __init__(self, access_key_id, secret_access_key, region, instance_id, ip=None):
         logging.info('Connecting to Amazon.')
         self.conn = connect_to_region(region,
                                       aws_access_key_id=access_key_id,
                                       aws_secret_access_key=secret_access_key)
         self.region = region
         self.instance_id = instance_id
+        self._ip = ip
 
-    # TODO: Implement
+    # Checks the instance state according to Amazon
     @property
     def instance_running(self):
         status = self.conn.get_all_instance_status(instance_ids=[self.instance_id])[0]
         logging.info("The instance state is: {}".format(status.state_name))
         return status.state_code == RUNNING
+
+    # Will attempt to get/set the ip of the instance, returns None if unavailable
+    # TODO: this will break if the instance dies before this script finishes
+    @property
+    def ip(self):
+        if not self._ip:
+            if self.instance_running:
+                instance = self.conn.get_all_instances(instance_ids=[self.instance_id])[0]
+                self._ip = str(instance.ip_address)
+        return self._ip
+
 
     # TODO: Implement
     @property
@@ -84,15 +97,30 @@ if __name__ == "__main__":
 
     # The instance is running now, so we need to wait for the web service to become available
     logging.info("Trying to contact web service.")
-    # TODO: make an http interface on the ec2 instance which can start the server
-    # get the ip so we can contact the server
+    start_time = time.time()
+    # I hate these while loops. Needs a method caller with a proper timeout
+    while True:
+        response = requests.head("http://{}:8080/status".format(server.ip))
+        if response.status_code == OK:
+            break
+        if time.time() - start_time >= TIMEOUT:
+            raise Exception('Timed out waiting for web service to be available')
+        time.sleep(5)
+
+    # Ok so at this point we need to configure everything and then launch the server.
     sys.exit(0)
+    """
+    Get the user checkin list and format it correctly.
+        I'm a bit fuzzy on how we do this. Is there code to turn the doc into the config file already?
+        Otherwise:
+            grab as csv (or something) from google docs
+            generate entry_list.ini using predefined entries dict
+    Get server.cfg from wherever it is stored
+        predefined configs exist somewhere.
+        load the correct one (ini format right?) in and edit needed fields
+        save as new file somewhere. Also upload these (is there an S3 account?)
+    Put them in the correct location on the server
 
-
-    # run commands over ssh, or using Fabric (or SSM for a windows instance)
-    # fuck it, just make a tiny web server on the instance to launch everything from there
-    
-    # Get the user checkin list, and server config files from wherever they are stored
-    # Put them in the correct location on the server
-
-    # Run the server!
+    Run the server!
+        Just start it and wait
+    """
