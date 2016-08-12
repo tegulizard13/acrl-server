@@ -16,9 +16,10 @@ DELETE = "DELETE"
 acrl = Bottle()
 
 
-@acrl.route('/status', method=GET)
+@acrl.route('/home', method=GET)
 def home():
     return "Welcome to ACRL"
+
 
 # Check the status and generate an in-depth status page
 @acrl.route('/status', method=GET)
@@ -39,7 +40,7 @@ def instance_running():
 # Check to see if the server exe is in the list of running programs
 def server_running():
     server_is_running = False
-
+    # Remember, this part is Windows only
     p1 = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
     output = p1.communicate()[0]
     # Get a list of process names
