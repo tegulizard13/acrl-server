@@ -1,8 +1,15 @@
 '''
 Bottle server with api methods for starting everything
 '''
-from bottle import Bottle, run
+from bottle import Bottle, run, request
 import subprocess
+import os
+
+# Windows install path containing server exe
+SERVER_PATH = 'C:\\acrl\\'
+CONFIG_PATH = os.path.join(SERVER_PATH, 'presets')
+AC_SERVER_EXE = 'acServer.exe'
+
 
 # HTTP Verbs
 POST = "POST"
@@ -30,6 +37,26 @@ def status():
     else:
         acrl_status = "{}The race server is not running.\n".format(acrl_status)
     return acrl_status
+
+
+@acrl.route('/upload', method=POST)
+def upload_configs():
+    upload = request.files.get('server_cfg')
+    check_in_sheet_url = request.forms.get('check_in_sheet_url')
+
+    # List CONFIG_PATH, and make the next directory
+    p1 = subprocess.Popen(["cmd", "/C", "DIR /B", CONFIG_PATH], stdout=subprocess.PIPE)
+    output = sorted(p1.communicate()[0])
+    server_config_dir = output[0]
+    next_server_config_dir = "{}{}".format(server_config_dir[:-2], int(server_config_dir[-2:])+1)
+
+    if not os.path.exists(next_server_config_dir):
+        os.makedirs(next_server_config_dir)
+
+    file_path = os.path.join(CONFIG_PATH, next_server_config_dir, upload.filename)
+    upload.save(file_path)
+
+    return "File successfully saved to '{0}'.".format(file_path)
 
 
 # lol
