@@ -2,9 +2,10 @@
 Bottle server with api methods for starting everything
 '''
 # TODO: make templates and render some html.
-from bottle import Bottle, run, request
+from bottle import Bottle, run, request #pip install bottle
 import subprocess
 import os
+import gspread #pip install gspread
 
 # Windows install path containing server exe
 SERVER_PATH = 'C:\\acrl\\'
@@ -39,6 +40,7 @@ def status():
         acrl_status = "{}The race server is not running.\n".format(acrl_status)
     return acrl_status
 
+
 # TODO: all these returns will have to be redone using templates
 @acrl.route('/upload', method=POST)
 def upload_configs():
@@ -57,7 +59,11 @@ def upload_configs():
     file_path = os.path.join(CONFIG_PATH, next_server_config_dir, upload.filename)
     upload.save(file_path)
 
-    return "File successfully saved to '{0}'.".format(file_path)
+    # Get the new checkin list into the same directory
+    current_entries = current_entry_list(check_in_sheet_url)
+    write_current_entry_list(current_entries)
+
+    return "Success"
 
 
 # lol
@@ -81,11 +87,11 @@ def server_running():
 # Returns new entry list as a string
 # TODO: Implement
 def current_entry_list(checkin_url):
-    # Get the check-in list from google sheets
-    checkin_list = []
+    # Get the check-in list from google sheets. use gspread
+    checkin_list = [] #list of username strings who checked in
 
     # Get the full entry list of all members (also store as a google doc?)
-    racers = {'name': 'entry_string'}
+    racers = {'example_racer_name': 'full_entry_as_string'}
 
     entries = []
     for checked_in in checkin_list:

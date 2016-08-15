@@ -110,11 +110,6 @@ if __name__ == "__main__":
     # Ok so at this point we need to configure everything and then launch the server.
     sys.exit(0)
     """
-    Get the user checkin list and format it correctly.
-        I'm a bit fuzzy on how we do this. Is there code to turn the doc into the config file already?
-        Otherwise:
-            grab as csv (or something) from google docs
-            generate entry_list.ini using predefined entries dict
     Get server.cfg from wherever it is stored
         predefined configs exist somewhere.
         load the correct one (ini format right?) in and edit needed fields
