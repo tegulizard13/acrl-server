@@ -2,7 +2,7 @@
 Bottle server with api methods for starting everything
 '''
 # TODO: make templates and render some html.
-from bottle import Bottle, run, request #pip install bottle
+from bottle import Bottle, run, request, template, view #pip install bottle
 import subprocess
 import os
 import gspread #pip install gspread
@@ -30,20 +30,25 @@ def home():
     return "Welcome to ACRL"
 
 
-# Check the status and generate an in-depth status page
+# Check the status and generate an in-depth status page, with links to do things
 @acrl.route('/', method=GET)
+@view('status')
 def status():
-    acrl_status = "You're seeing this, so the Amazon EC2 Instance is on!\n"
-    if server_running():
-        acrl_status = "{}The race server should be up and running!\n".format(acrl_status)
-    else:
-        acrl_status = "{}The race server is not running.\n".format(acrl_status)
-    return acrl_status
+    return dict(server_running=server_running())
 
 
-# TODO: all these returns will have to be redone using templates
+@acrl.route('/upload', method=GET)
+@view('upload')
+def upload_configs_page():
+    pass
+
+
+# TODO: add exception handling
 @acrl.route('/upload', method=POST)
 def upload_configs():
+    entry_list_generated = False
+    server_cfg_written = False
+
     upload = request.files.get('server_cfg')
     check_in_sheet_url = request.forms.get('check_in_sheet_url')
 
@@ -58,12 +63,16 @@ def upload_configs():
 
     file_path = os.path.join(CONFIG_PATH, next_server_config_dir, upload.filename)
     upload.save(file_path)
+    server_cfg_written = True
 
     # Get the new checkin list into the same directory
     current_entries = current_entry_list(check_in_sheet_url)
     write_current_entry_list(current_entries)
+    entry_list_generated = True
 
-    return "Success"
+    return template('upload_status',
+                    server_cfg_written=server_cfg_written,
+                    entry_list_generated=entry_list_generated)
 
 
 # lol
