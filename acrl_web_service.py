@@ -25,13 +25,13 @@ DELETE = "DELETE"
 acrl = Bottle()
 
 
-@acrl.route('/home', method=GET)
+@acrl.route('/about', method=GET)
 def home():
     return "Welcome to ACRL"
 
 
 # Check the status and generate an in-depth status page
-@acrl.route('/status', method=GET)
+@acrl.route('/', method=GET)
 def status():
     acrl_status = "You're seeing this, so the Amazon EC2 Instance is on!\n"
     if server_running():
@@ -85,7 +85,7 @@ def server_running():
 
 
 # Returns new entry list as a string
-# TODO: Implement
+# TODO: Finish implementing
 def current_entry_list(checkin_url):
     # Get the check-in list from google sheets. use gspread
     checkin_list = [] #list of username strings who checked in
