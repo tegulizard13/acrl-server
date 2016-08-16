@@ -37,12 +37,6 @@ def status():
     return dict(server_running=server_running())
 
 
-@acrl.route('/upload', method=GET)
-@view('upload')
-def upload_configs_page():
-    pass
-
-
 # TODO: add exception handling
 @acrl.route('/upload', method=POST)
 def upload_configs():
