@@ -101,6 +101,8 @@ def control_server():
     elif action == RESTART:
         restart_server()
 
+    return status()
+
 
 # TODO: start the server and return the process id
 # TODO: Found this on SO, need to verify the server keeps going if the web service dies
@@ -118,15 +120,27 @@ def start_server():
     with open(os.path.join(SERVER_CFG, 'PID'), 'w') as pid_file:
         pid_file.write(str(p.pid))
 
+    # Return True id server is running (may be misleading)
+    return server_running()
 
-# Fragile
+
+# Fragile if you rely on the PID file. Scorched earth, motherfucker.
 def kill_server():
-    pass
+    p = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
+    output = p.communicate()[0]
+    # Get a list of acrl server pids
+    ac_server_pids = [name.split()[1] for name in output.strip().split('\n') if name.split()[0] == AC_SERVER_EXE]
+    for pid in ac_server_pids:
+        subprocess.call(["taskkill", "/pid,", str(pid), "/f"])
+
+    # Return True if the server is stopped
+    return not server_running()
 
 
 def restart_server():
-    kill_server()
-    start_server()
+    if not kill_server():
+        return False
+    return start_server()
 
 
 # lol
