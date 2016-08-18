@@ -2,6 +2,7 @@
 <head>
     <title>ACRL :: Assetto Corsa Racing League :: Upload Results</title>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="refresh" content="10;url=/" />
     <!-- <link rel="stylesheet" type="text/css" href=".css"> -->
 </head>
 <body>
@@ -15,5 +16,8 @@
     %else:
         Entry list <span style="color:green;">generation failed</span>.
     %end
+    <br /><br />
+    <a href="/">Go home!</a>
+
 </body>
 </html>

@@ -16,10 +16,14 @@
     <span style="font-weight:bold;">Server Actions:</span><br />
     <!-- start/stop/restart game server-->
     %if not server_running:
-        Server starting link<br />
+        <form action="/control" method="post">
+            <button type="submit" name="action" value="start">Start server</button>
+        </form>
     %else:
-        Server stopping link<br />
-        Server restart link<br />
+        <form action="/control" method="post">
+            <button type="submit" name="action" value="stop">Stop server</button>
+            <button type="submit" name="action" value="restart">Restart server</button>
+        </form>
     %end
     <!-- upload configurations -->
     <br />
