@@ -5,13 +5,17 @@ Bottle server with api methods for starting everything
 from bottle import Bottle, run, request, template, view #pip install bottle
 import subprocess
 import os
+import shutil
 import gspread #pip install gspread
 
 # Windows install path containing server exe
 SERVER_PATH = 'C:\\acrl\\'
 CONFIG_PATH = os.path.join(SERVER_PATH, 'presets')
+# Runnable cfg
+CFG_PATH = os.path.join(SERVER_PATH, 'cfg')
 AC_SERVER_EXE = 'acServer.exe'
 ENTRY_LIST = 'entry_list.ini'
+SERVER_CFG = 'server_cfg.ini'
 
 # HTTP Verbs
 POST = "POST"
@@ -20,21 +24,30 @@ GET = "GET"
 HEAD = "HEAD"
 DELETE = "DELETE"
 
-#
+START = 'start'
+STOP = 'stop'
+RESTART = 'restart'
+CREATE_NEW_PROCESS_GROUP = 0x00000200
+DETACHED_PROCESS = 0x00000008
+
 # Our server
 acrl = Bottle()
 
 
 @acrl.route('/about', method=GET)
 def home():
-    return "Welcome to ACRL"
+    return "Welcome to ACRL!<br />" \
+           "ACRL is an international racing league that was created to provide clean and competitive multiplayer " \
+           "racing in Assetto Corsa. The league is divided into North American and European subleagues to better " \
+           "serve our members. If that sounds like something you are interested in, go ahead and register with our " \
+           "league!"
 
 
 # Check the status and generate an in-depth status page, with links to do things
 @acrl.route('/', method=GET)
 @view('status')
 def status():
-    return dict(server_running=server_running())
+    return dict(server_running=True)#server_running())
 
 
 # TODO: add exception handling
@@ -64,9 +77,56 @@ def upload_configs():
     write_current_entry_list(current_entries)
     entry_list_generated = True
 
+    # Copy the configs to the runnable dir
+    p1 = subprocess.Popen(["cmd", "/C", "DIR /B", CONFIG_PATH], stdout=subprocess.PIPE)
+    output = sorted(p1.communicate()[0])
+    server_config_dir_name = output[0]
+    shutil.copy(file_path,
+                os.path.join(CFG_PATH, SERVER_CFG))
+    shutil.copy(os.path.join(CONFIG_PATH, server_config_dir_name, ENTRY_LIST),
+                os.path.join(CFG_PATH, ENTRY_LIST))
+
     return template('upload_status',
                     server_cfg_written=server_cfg_written,
                     entry_list_generated=entry_list_generated)
+
+
+@acrl.route('/control', method=POST)
+def control_server():
+    action = request.forms.get('action')
+    if action == START:
+        start_server()
+    elif action == STOP:
+        kill_server()
+    elif action == RESTART:
+        restart_server()
+
+
+# TODO: start the server and return the process id
+# TODO: Found this on SO, need to verify the server keeps going if the web service dies
+# I don't know how long this blocks for
+def start_server():
+    ac_path = os.path.join(SERVER_PATH, AC_SERVER_EXE)
+
+    p = subprocess.Popen([ac_path],
+                         stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE,
+                         creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+
+    # file modification date and pid are stored
+    with open(os.path.join(SERVER_CFG, 'PID'), 'w') as pid_file:
+        pid_file.write(str(p.pid))
+
+
+# Fragile
+def kill_server():
+    pass
+
+
+def restart_server():
+    kill_server()
+    start_server()
 
 
 # lol

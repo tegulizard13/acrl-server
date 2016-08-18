@@ -56,7 +56,7 @@ class ACRLServer(object):
         if not self._ip:
             if self.instance_running:
                 instance = self.conn.get_all_instances(instance_ids=[self.instance_id])[0]
-                self._ip = str(instance.ip_address)
+                self._ip = str(instance.instances[0].ip_address)
         return self._ip
 
 
@@ -93,29 +93,16 @@ if __name__ == "__main__":
     logging.info("Checking if the instance is running.")
     if not server.instance_running:
         # Start the instance
-        server.start_instance()
-
+        #server.start_instance()
+        pass
     # The instance is running now, so we need to wait for the web service to become available
     logging.info("Trying to contact web service.")
     start_time = time.time()
     # I hate these while loops. Needs a method caller with a proper timeout
     while True:
+        if time.time() - start_time >= TIMEOUT:
+            raise Exception('Timed out waiting for web service to be available')
         response = requests.head("http://{}:8080/status".format(server.ip))
         if response.status_code == OK:
             break
-        if time.time() - start_time >= TIMEOUT:
-            raise Exception('Timed out waiting for web service to be available')
         time.sleep(5)
-
-    # Ok so at this point we need to configure everything and then launch the server.
-    sys.exit(0)
-    """
-    Get server.cfg from wherever it is stored
-        predefined configs exist somewhere.
-        load the correct one (ini format right?) in and edit needed fields
-        save as new file somewhere. Also upload these (is there an S3 account?)
-    Put them in the correct location on the server
-
-    Run the server!
-        Just start it and wait
-    """
