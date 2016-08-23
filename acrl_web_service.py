@@ -9,7 +9,8 @@ import shutil
 import gspread #pip install gspread
 
 # Windows install path containing server exe
-SERVER_PATH = 'C:\\acrl\\'
+#SERVER_PATH = '"C:\\Program Files (x86)\\Steam\\steamapps\\common\\assettocorsa\\server"'
+SERVER_PATH = 'C:\Program Files (x86)\Steam\steamapps\common\\assettocorsa\server'
 CONFIG_PATH = os.path.join(SERVER_PATH, 'presets')
 # Runnable cfg
 CFG_PATH = os.path.join(SERVER_PATH, 'cfg')
@@ -47,7 +48,7 @@ def home():
 @acrl.route('/', method=GET)
 @view('status')
 def status():
-    return dict(server_running=True)#server_running())
+    return dict(server_running=server_running())
 
 
 # TODO: add exception handling
@@ -108,18 +109,19 @@ def control_server():
 # TODO: Found this on SO, need to verify the server keeps going if the web service dies
 # I don't know how long this blocks for
 def start_server():
-    ac_path = os.path.join(SERVER_PATH, AC_SERVER_EXE)
-
+    my_env = os.environ
+    my_env["PATH"] = "{}:{}".format(SERVER_PATH, my_env["PATH"])
+    ac_path = '"{}"'.format(os.path.join(SERVER_PATH, AC_SERVER_EXE))
+    print ac_path
     p = subprocess.Popen([ac_path],
-                         stdin=subprocess.PIPE,
-                         stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE,
+                         env=my_env,
+                         close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
 
     # file modification date and pid are stored
-    with open(os.path.join(SERVER_CFG, 'PID'), 'w') as pid_file:
+    with open(os.path.join(CFG_PATH, 'PID'), 'w') as pid_file:
         pid_file.write(str(p.pid))
-
+ 
     # Return True id server is running (may be misleading)
     return server_running()
 
@@ -131,7 +133,7 @@ def kill_server():
     # Get a list of acrl server pids
     ac_server_pids = [name.split()[1] for name in output.strip().split('\n') if name.split()[0] == AC_SERVER_EXE]
     for pid in ac_server_pids:
-        subprocess.call(["taskkill", "/pid,", str(pid), "/f"])
+        k = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
 
     # Return True if the server is stopped
     return not server_running()
@@ -186,4 +188,4 @@ def write_current_entry_list(entry_list_string):
         entry_list_ini.write(entry_list_string)
 
 if __name__ == "__main__":
-    run(acrl, host='127.0.0.1', port=8080)
+    run(acrl, host='0.0.0.0', port=8080)
