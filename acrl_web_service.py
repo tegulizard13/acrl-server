@@ -57,6 +57,7 @@ def status():
 # TODO: add exception handling
 @acrl.route('/upload', method=POST)
 def upload_configs():
+    '''
     #entry_list_generated = False
     server_cfg_written = False
 
@@ -96,10 +97,10 @@ def upload_configs():
                 os.path.join(CFG_PATH, ENTRY_LIST))
     # shutil.copy(os.path.join(CONFIG_PATH, server_config_dir_name, ENTRY_LIST),
     #             os.path.join(CFG_PATH, ENTRY_LIST))
-
+    '''
     return template('upload_status',
-                    server_cfg_written=server_cfg_written,
-                    entry_list_generated=entry_list_generated)
+                    server_cfg_written=True,
+                    entry_list_generated=True)
 
 
 @acrl.route('/control', method=POST)
@@ -119,6 +120,7 @@ def control_server():
 # TODO: Found this on SO, need to verify the server keeps going if the web service dies
 # I don't know how long this blocks for
 def start_server():
+    return True
     ac_path = '"{}"'.format(os.path.join(SERVER_PATH, AC_SERVER_EXE))
     os.chdir(SERVER_PATH)
     p = subprocess.Popen([ac_path],
@@ -135,6 +137,7 @@ def start_server():
 
 # Fragile if you rely on the PID file. Scorched earth, motherfucker.
 def kill_server():
+    return True
     p = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
     output = p.communicate()[0]
     # Get a list of acrl server pids
@@ -150,6 +153,7 @@ def kill_server():
 
 
 def restart_server():
+    return True
     if not kill_server():
         return False
     return start_server()
@@ -174,11 +178,12 @@ def server_running():
 
 
 # Returns new entry list as a string
-# TODO: Finish implementing
+# TODO: Implement
 def current_entry_list(checkin_url):
     # Get the check-in list from google sheets. use gspread
     checkin_list = [] #list of username strings who checked in
 
+    credentials = None
     gc = gspread.authorize(credentials)
     # Open a worksheet from spreadsheet with one shot
     wks = gc.open("Where is the money Lebowski?").sheet1
