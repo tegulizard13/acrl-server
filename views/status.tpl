@@ -28,7 +28,8 @@
     <!-- upload configurations -->
     <br />
     <form action="/upload" method="post" enctype="multipart/form-data">
-        Check-in sheet url: <input type="text" name="check_in_sheet_url" /><br />
+        <!-- Check-in sheet url: <input type="text" name="check_in_sheet_url" /><br /> -->
+        Check-in sheet url: <input type="file" name="entry_list" /><br />
         Server configuration: <input type="file" name="server_cfg" /><br />
         <input type="submit" value="Submit" />
     </form>
