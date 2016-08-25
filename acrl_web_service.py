@@ -109,12 +109,9 @@ def control_server():
 # TODO: Found this on SO, need to verify the server keeps going if the web service dies
 # I don't know how long this blocks for
 def start_server():
-    my_env = os.environ
-    my_env["PATH"] = "{}:{}".format(SERVER_PATH, my_env["PATH"])
     ac_path = '"{}"'.format(os.path.join(SERVER_PATH, AC_SERVER_EXE))
-    print ac_path
+    os.chdir(SERVER_PATH)
     p = subprocess.Popen([ac_path],
-                         env=my_env,
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
 
@@ -136,7 +133,10 @@ def kill_server():
         k = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
 
     # Return True if the server is stopped
-    return not server_running()
+    if not server_running():
+        #TODO: upload logs
+        return True
+    return False
 
 
 def restart_server():
