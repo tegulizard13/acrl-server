@@ -7,7 +7,7 @@ import time
 import sys
 import json
 import requests
-
+import webbrowser
 
 RUNNING = 16
 TIMEOUT = 300
@@ -23,8 +23,7 @@ log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(me
 fh.setFormatter(log_formatter)
 # console handler
 ch = logging.StreamHandler()
-# TODO: set to INFO when done
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.INFO)
 console_formatter = logging.Formatter('%(levelname)s: %(message)s')
 ch.setFormatter(console_formatter)
 # Add our handlers to the root logger
@@ -59,12 +58,6 @@ class ACRLServer(object):
                 self._ip = str(instance.instances[0].ip_address)
         return self._ip
 
-
-    # TODO: Implement
-    @property
-    def server_running(self):
-        return False
-
     # Blocks, could spin up a thread if you wanted
     def start_instance(self):
         start_time = time.time()
@@ -91,18 +84,26 @@ if __name__ == "__main__":
                         instance_id=acrl_info["instance_id"])
 
     logging.info("Checking if the instance is running.")
-    if not server.instance_running:
+    ip = server.ip
+    if not ip:
         # Start the instance
         #server.start_instance()
         pass
+
     # The instance is running now, so we need to wait for the web service to become available
     logging.info("Trying to contact web service.")
     start_time = time.time()
-    # I hate these while loops. Needs a method caller with a proper timeout
+
+    # Needs a method caller with a proper timeout
     while True:
         if time.time() - start_time >= TIMEOUT:
             raise Exception('Timed out waiting for web service to be available')
-        response = requests.head("http://{}:8080/status".format(server.ip))
+        response = requests.head("http://{}:8080/".format(ip))
         if response.status_code == OK:
             break
         time.sleep(5)
+
+    logging.info("The http server is running at http://{}:8080/".format(ip))
+    logging.info("Opening the web page")
+    webbrowser.open("http://{}:8080/".format(ip))
+    sys.exit(0)
