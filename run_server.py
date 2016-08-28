@@ -98,10 +98,6 @@ if __name__ == "__main__":
 
     logging.info("Checking if the instance is running.")
     ip = server.ip
-    if not ip:
-        server.start_instance()
-        ip = server.ip
-
     # If we couldn't get the instance address then it's not running. Start the instance.
     if not ip:
         try:
@@ -110,6 +106,8 @@ if __name__ == "__main__":
             logging.error("Couldn't start the instance.")
             raise
         ip = server.ip
+    if not ip:
+        raise Exception('cannot start the instance.')
 
     # The instance is running now, so we need to wait for the web service to become available
     logging.info("Trying to contact web service.")
