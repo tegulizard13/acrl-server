@@ -7,10 +7,10 @@ import time
 import sys
 import json
 import requests
-
+import webbrowser
 
 RUNNING = 16
-TIMEOUT = 300
+TIMEOUT = 120
 
 
 # Set up logging, so if something goes wrong there is a file to send to get help.
@@ -23,8 +23,7 @@ log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(me
 fh.setFormatter(log_formatter)
 # console handler
 ch = logging.StreamHandler()
-# TODO: set to INFO when done
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.INFO)
 console_formatter = logging.Formatter('%(levelname)s: %(message)s')
 ch.setFormatter(console_formatter)
 # Add our handlers to the root logger
@@ -45,9 +44,15 @@ class ACRLServer(object):
     # Checks the instance state according to Amazon
     @property
     def instance_running(self):
-        status = self.conn.get_all_instance_status(instance_ids=[self.instance_id])[0]
-        logging.info("The instance state is: {}".format(status.state_name))
-        return status.state_code == RUNNING
+        instance_status = "stopped"
+        statuses = self.conn.get_all_instance_status(instance_ids=[self.instance_id])
+        if statuses:
+            status = statuses[0]
+            instance_status = status.state_code
+            logging.info("The instance state is: {}".format(status.state_name))
+        else:
+            logging.info("The instance state is unknown")
+        return instance_status == RUNNING
 
     # Will attempt to get/set the ip of the instance, returns None if unavailable
     # TODO: this will break if the instance dies before this script finishes
@@ -69,10 +74,11 @@ class ACRLServer(object):
     def start_instance(self):
         start_time = time.time()
         logging.info("Starting Amazon EC2 instance {}.".format(self.instance_id))
-        self.conn.run_instances(self.instance_id, 0, 1)
-        time.sleep(10)
+        instance = self.conn.get_all_instances(instance_ids=[self.instance_id])
+        instance[0].instances[0].start()
+        # self.conn.run_instances(self.instance_id, 0, 1)
+        time.sleep(5)
         while not self.instance_running:
-            sys.exit(0) #Do this for now to be non-destructive
             logging.info("Waited for instance to start for {} seconds.".format(time.time()-start_time))
             if time.time()-start_time >= TIMEOUT:
                 raise Exception('Timed out waiting for instance to start')
@@ -91,18 +97,38 @@ if __name__ == "__main__":
                         instance_id=acrl_info["instance_id"])
 
     logging.info("Checking if the instance is running.")
-    if not server.instance_running:
-        # Start the instance
-        #server.start_instance()
-        pass
+    ip = server.ip
+    if not ip:
+        server.start_instance()
+        ip = server.ip
+
+    # If we couldn't get the instance address then it's not running. Start the instance.
+    if not ip:
+        try:
+            server.start_instance()
+        except:
+            logging.error("Couldn't start the instance.")
+            raise
+        ip = server.ip
+
     # The instance is running now, so we need to wait for the web service to become available
     logging.info("Trying to contact web service.")
     start_time = time.time()
-    # I hate these while loops. Needs a method caller with a proper timeout
+
+    # TODO: use the requests timeout (set one) and just loop
     while True:
         if time.time() - start_time >= TIMEOUT:
             raise Exception('Timed out waiting for web service to be available')
-        response = requests.head("http://{}:8080/status".format(server.ip))
-        if response.status_code == OK:
-            break
+        try:
+            response = requests.head("http://{}:8080/".format(ip))
+            if response.status_code == OK:
+                break
+        except Exception as e:
+            logging.info("Couldn't contact the http server after {} seconds.".format(time.time()-start_time))
+            logging.debug(e.message)
         time.sleep(5)
+
+    logging.info("The http server is running at http://{}:8080/".format(ip))
+    logging.info("Opening the web page")
+    webbrowser.open("http://{}:8080/".format(ip))
+
