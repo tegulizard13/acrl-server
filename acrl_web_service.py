@@ -111,7 +111,6 @@ def control_server():
         kill_server()
     elif action == RESTART:
         restart_server()
-
     return status()
 
 
@@ -121,7 +120,7 @@ def control_server():
 def start_server():
     ac_path = '"{}"'.format(os.path.join(SERVER_PATH, AC_SERVER_EXE))
     os.chdir(SERVER_PATH)
-    p = subprocess.Popen([ac_path],
+    p = subprocess.Popen([AC_SERVER_EXE],
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
 
@@ -129,7 +128,7 @@ def start_server():
     with open(os.path.join(CFG_PATH, 'PID'), 'w') as pid_file:
         pid_file.write(str(p.pid))
  
-    # Return True id server is running (may be misleading)
+    # Return True if server is running (may be misleading)
     return server_running()
 
 
