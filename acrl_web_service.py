@@ -4,11 +4,12 @@
 Bottle server with api methods for starting everything
 '''
 # TODO: make templates and render some html.
-from bottle import Bottle, run, request, template, view #pip
+from bottle import Bottle, run, request, template, view
 import subprocess
 import os
 import shutil
-import gspread #pip install gspread
+import gspread
+import time
 
 # Windows install path containing server exe
 # SERVER_PATH = 'C:\Program Files (x86)\Steam\steamapps\common\\assettocorsa\server'
@@ -111,7 +112,8 @@ def control_server():
         kill_server()
     elif action == RESTART:
         restart_server()
-    return status()
+    time.sleep(1)
+    return template('redirect_home')
 
 
 # TODO: start the server and return the process id
