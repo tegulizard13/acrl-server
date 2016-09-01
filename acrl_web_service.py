@@ -16,6 +16,8 @@ import logging
 # SERVER_PATH = 'C:\Program Files (x86)\Steam\steamapps\common\\assettocorsa\server'
 SERVER_PATH = 'C:\ACServer'
 CONFIG_PATH = os.path.join(SERVER_PATH, 'presets')
+STAGING_PATH = os.path.join(CONFIG_PATH, 'staging')
+
 # Runnable cfg
 CFG_PATH = os.path.join(SERVER_PATH, 'cfg')
 AC_SERVER_EXE = 'acServer.exe'
@@ -66,30 +68,20 @@ def upload_configs():
         entry_list = request.files.get('entry_list')
         # check_in_sheet_url = request.forms.get('check_in_sheet_url')
 
-        # List CONFIG_PATH, and make the next directory
-        p1 = subprocess.Popen(["cmd", "/C", "DIR /B", CONFIG_PATH], stdout=subprocess.PIPE)
-        output = sorted(p1.communicate()[0])
-        server_config_dir = output[0]
-        next_server_config_dir = "{}{}".format(server_config_dir[:-2], int(server_config_dir[-2:])+1)
+        if not os.path.exists(STAGING_PATH):
+            os.makedirs(STAGING_PATH)
 
-        if not os.path.exists(os.path.join(CONFIG_PATH, next_server_config_dir)):
-            os.makedirs(os.path.join(CONFIG_PATH, next_server_config_dir))
-
-        server_config_path = os.path.join(CONFIG_PATH, next_server_config_dir, server_cfg.filename)
-        entry_list_path = os.path.join(CONFIG_PATH, next_server_config_dir, entry_list.filename)
+        server_config_path = os.path.join(STAGING_PATH, server_cfg.filename)
         server_cfg.save(server_config_path)
-        entry_list.save(entry_list_path)
         server_cfg_written = True
 
         # Get the new checkin list into the same directory
         # current_entries = current_entry_list(check_in_sheet_url)
         # write_current_entry_list(current_entries)
+        entry_list_path = os.path.join(STAGING_PATH, entry_list.filename)
+        entry_list.save(entry_list_path)
         entry_list_generated = True
 
-        # Copy the configs to the runnable dir
-        p1 = subprocess.Popen(["cmd", "/C", "DIR /B", CONFIG_PATH], stdout=subprocess.PIPE)
-        output = sorted(p1.communicate()[0])
-        server_config_dir_name = output[0]
         # Copy the server config
         shutil.copy(server_config_path,
                     os.path.join(CFG_PATH, SERVER_CFG))
