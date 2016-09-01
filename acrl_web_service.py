@@ -93,17 +93,14 @@ def upload_configs():
 
         # Attempt to write the uploaded server config to the staging directory
         server_config_path = os.path.join(STAGING_PATH, server_cfg.filename)
-        server_cfg.save(server_config_path)
+        server_cfg.save(server_config_path, overwrite=True)
         server_cfg_written = True
 
         # Attempt to write the uploaded entry list to the staging directory
         entry_list_path = os.path.join(STAGING_PATH, entry_list.filename)
-        entry_list.save(entry_list_path)
+        entry_list.save(entry_list_path, overwrite=True)
         entry_list_generated = True
 
-        # Remove the current configs
-        os.remove(os.path.join(CONFIG_PATH, SERVER_CFG))
-        os.remove(os.path.join(CONFIG_PATH, ENTRY_LIST))
         # Copy the new configs to the active config directory
         shutil.copy(server_config_path,
                     os.path.join(CONFIG_PATH, SERVER_CFG))
