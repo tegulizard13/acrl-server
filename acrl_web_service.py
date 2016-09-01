@@ -1,9 +1,7 @@
 #pip install bottle, requests, gspread
-
 '''
 Bottle server with api methods for starting everything
 '''
-# TODO: make templates and render some html.
 from bottle import Bottle, run, request, template, view
 import subprocess
 import os
@@ -12,25 +10,22 @@ import gspread
 import time
 import logging
 
-# Windows install path containing server exe
-# SERVER_PATH = 'C:\Program Files (x86)\Steam\steamapps\common\\assettocorsa\server'
+# Windows install path and server exe
 SERVER_PATH = 'C:\ACServer'
-CONFIG_PATH = os.path.join(SERVER_PATH, 'presets')
-STAGING_PATH = os.path.join(CONFIG_PATH, 'staging')
-
-# Runnable cfg
-CFG_PATH = os.path.join(SERVER_PATH, 'cfg')
 AC_SERVER_EXE = 'acServer.exe'
 AC_SERVER_BAT = 'acServer.bat'
+
+# Configuration paths and files
+PRESETS_PATH = os.path.join(SERVER_PATH, 'presets')
+STAGING_PATH = os.path.join(PRESETS_PATH, 'staging')
+CONFIG_PATH = os.path.join(SERVER_PATH, 'cfg')
 ENTRY_LIST = 'entry_list.ini'
 SERVER_CFG = 'server_cfg.ini'
 
 # HTTP Verbs
 POST = "POST"
-PUT = "PUT"
 GET = "GET"
 HEAD = "HEAD"
-DELETE = "DELETE"
 
 START = 'start'
 STOP = 'stop'
@@ -38,17 +33,30 @@ RESTART = 'restart'
 CREATE_NEW_PROCESS_GROUP = 0x00000200
 DETACHED_PROCESS = 0x00000008
 
+# Set up logging, so if something goes wrong there is a file to send to get help.
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+# Log to file
+fh = logging.FileHandler('server.log')
+fh.setLevel(logging.DEBUG)
+log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(log_formatter)
+# console handler
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+ch.setFormatter(console_formatter)
+# Add our handlers to the root logger
+root_logger.addHandler(fh)
+root_logger.addHandler(ch)
+
 # Our server
 acrl = Bottle()
 
 
 @acrl.route('/about', method=GET)
 def home():
-    return "Welcome to ACRL!<br />" \
-           "ACRL is an international racing league that was created to provide clean and competitive multiplayer " \
-           "racing in Assetto Corsa. The league is divided into North American and European subleagues to better " \
-           "serve our members. If that sounds like something you are interested in, go ahead and register with our " \
-           "league!"
+    return template('about')
 
 
 # Check the status and generate an in-depth status page, with links to do things
@@ -56,46 +64,6 @@ def home():
 @view('status')
 def status():
     return dict(server_running=server_running())
-
-
-# TODO: add exception handling
-@acrl.route('/upload', method=POST)
-def upload_configs():
-    entry_list_generated = False
-    server_cfg_written = False
-    try:
-        server_cfg = request.files.get('server_cfg')
-        entry_list = request.files.get('entry_list')
-        # check_in_sheet_url = request.forms.get('check_in_sheet_url')
-
-        if not os.path.exists(STAGING_PATH):
-            os.makedirs(STAGING_PATH)
-
-        server_config_path = os.path.join(STAGING_PATH, server_cfg.filename)
-        server_cfg.save(server_config_path)
-        server_cfg_written = True
-
-        # Get the new checkin list into the same directory
-        # current_entries = current_entry_list(check_in_sheet_url)
-        # write_current_entry_list(current_entries)
-        entry_list_path = os.path.join(STAGING_PATH, entry_list.filename)
-        entry_list.save(entry_list_path)
-        entry_list_generated = True
-
-        # Copy the server config
-        shutil.copy(server_config_path,
-                    os.path.join(CFG_PATH, SERVER_CFG))
-        # Copy the entry list
-        shutil.copy(entry_list_path,
-                    os.path.join(CFG_PATH, ENTRY_LIST))
-        # shutil.copy(os.path.join(CONFIG_PATH, server_config_dir_name, ENTRY_LIST),
-        #             os.path.join(CFG_PATH, ENTRY_LIST))
-    except Exception as e:
-        logging.exception(e.message)
-        logging.exception('Continuing to load, new uploads required.')
-    return template('upload_status',
-                    server_cfg_written=server_cfg_written,
-                    entry_list_generated=entry_list_generated)
 
 
 @acrl.route('/control', method=POST)
@@ -111,9 +79,43 @@ def control_server():
     return template('redirect_home')
 
 
-# TODO: start the server and return the process id
-# TODO: Found this on SO, need to verify the server keeps going if the web service dies
-# I don't know how long this blocks for
+# TODO: add better exception handling
+@acrl.route('/upload', method=POST)
+def upload_configs():
+    entry_list_generated = False
+    server_cfg_written = False
+    try:
+        if not os.path.exists(STAGING_PATH):
+            os.makedirs(STAGING_PATH)
+
+        server_cfg = request.files.get('server_cfg')
+        entry_list = request.files.get('entry_list')
+
+        # Attempt to write the uploaded server config to the staging directory
+        server_config_path = os.path.join(STAGING_PATH, server_cfg.filename)
+        server_cfg.save(server_config_path)
+        server_cfg_written = True
+
+        # Attempt to write the uploaded entry list to the staging directory
+        entry_list_path = os.path.join(STAGING_PATH, entry_list.filename)
+        entry_list.save(entry_list_path)
+        entry_list_generated = True
+
+        # Copy the server config to the active config directory
+        shutil.copy(server_config_path,
+                    os.path.join(CONFIG_PATH, SERVER_CFG))
+        # Copy the entry list to the active config directory
+        shutil.copy(entry_list_path,
+                    os.path.join(CONFIG_PATH, ENTRY_LIST))
+    except Exception as e:
+        logging.exception(e.message)
+        logging.exception('Continuing to load, new uploads required.')
+    return template('upload_status',
+                    server_cfg_written=server_cfg_written,
+                    entry_list_generated=entry_list_generated)
+
+
+# Start the server process
 def start_server():
     ac_path = '"{}"'.format(os.path.join(SERVER_PATH, AC_SERVER_EXE))
     os.chdir(SERVER_PATH)
@@ -123,7 +125,7 @@ def start_server():
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
 
     # file modification date and pid are stored
-    with open(os.path.join(CFG_PATH, 'PID'), 'w') as pid_file:
+    with open(os.path.join(CONFIG_PATH, 'PID'), 'w') as pid_file:
         pid_file.write(str(p.pid))
  
     # Return True if server is running (may be misleading)
@@ -141,7 +143,7 @@ def kill_server():
 
     # Return True if the server is stopped
     if not server_running():
-        #TODO: upload logs
+        #TODO: upload logs here?
         return True
     return False
 
@@ -149,6 +151,7 @@ def kill_server():
 def restart_server():
     if not kill_server():
         return False
+    time.sleep(1)
     return start_server()
 
 
@@ -171,7 +174,7 @@ def server_running():
 
 
 # Returns new entry list as a string
-# TODO: Finish implementing
+# TODO: Finish implementing at some point
 def current_entry_list(checkin_url):
     # Get the check-in list from google sheets. use gspread
     checkin_list = [] #list of username strings who checked in
@@ -195,10 +198,10 @@ def current_entry_list(checkin_url):
 
 # Writes unsafely to the current config directory
 def write_current_entry_list(entry_list_string):
-    p1 = subprocess.Popen(["cmd", "/C", "DIR /B", CONFIG_PATH], stdout=subprocess.PIPE)
+    p1 = subprocess.Popen(["cmd", "/C", "DIR /B", PRESETS_PATH], stdout=subprocess.PIPE)
     output = sorted(p1.communicate()[0])
     server_config_dir_name = output[0]
-    with open(os.path.join(CONFIG_PATH, server_config_dir_name, ENTRY_LIST), 'w') as entry_list_ini:
+    with open(os.path.join(PRESETS_PATH, server_config_dir_name, ENTRY_LIST), 'w') as entry_list_ini:
         entry_list_ini.write(entry_list_string)
 
 if __name__ == "__main__":
