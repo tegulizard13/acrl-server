@@ -120,7 +120,8 @@ def control_server():
 def start_server():
     ac_path = '"{}"'.format(os.path.join(SERVER_PATH, AC_SERVER_EXE))
     os.chdir(SERVER_PATH)
-    p = subprocess.Popen([AC_SERVER_EXE],
+    # TODO: For now call the bat file so the log gets created for us.
+    p = subprocess.Popen([AC_SERVER_BAT],
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
 
@@ -136,7 +137,7 @@ def start_server():
 def kill_server():
     p = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
     output = p.communicate()[0]
-    # Get a list of acrl server pids
+    # Get a list of acrl server (acServer.exe) pids
     ac_server_pids = [name.split()[1] for name in output.strip().split('\n') if name.split()[0] == AC_SERVER_EXE]
     for pid in ac_server_pids:
         k = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
