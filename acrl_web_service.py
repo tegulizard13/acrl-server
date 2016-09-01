@@ -10,6 +10,7 @@ import os
 import shutil
 import gspread
 import time
+import logging
 
 # Windows install path containing server exe
 # SERVER_PATH = 'C:\Program Files (x86)\Steam\steamapps\common\\assettocorsa\server'
@@ -58,46 +59,48 @@ def status():
 # TODO: add exception handling
 @acrl.route('/upload', method=POST)
 def upload_configs():
-    #entry_list_generated = False
+    entry_list_generated = False
     server_cfg_written = False
+    try:
+        server_cfg = request.files.get('server_cfg')
+        entry_list = request.files.get('entry_list')
+        # check_in_sheet_url = request.forms.get('check_in_sheet_url')
 
-    server_cfg = request.files.get('server_cfg')
-    entry_list = request.files.get('entry_list')
-    # check_in_sheet_url = request.forms.get('check_in_sheet_url')
+        # List CONFIG_PATH, and make the next directory
+        p1 = subprocess.Popen(["cmd", "/C", "DIR /B", CONFIG_PATH], stdout=subprocess.PIPE)
+        output = sorted(p1.communicate()[0])
+        server_config_dir = output[0]
+        next_server_config_dir = "{}{}".format(server_config_dir[:-2], int(server_config_dir[-2:])+1)
 
-    # List CONFIG_PATH, and make the next directory
-    p1 = subprocess.Popen(["cmd", "/C", "DIR /B", CONFIG_PATH], stdout=subprocess.PIPE)
-    output = sorted(p1.communicate()[0])
-    server_config_dir = output[0]
-    next_server_config_dir = "{}{}".format(server_config_dir[:-2], int(server_config_dir[-2:])+1)
+        if not os.path.exists(os.path.join(CONFIG_PATH, next_server_config_dir)):
+            os.makedirs(os.path.join(CONFIG_PATH, next_server_config_dir))
 
-    if not os.path.exists(os.path.join(CONFIG_PATH, next_server_config_dir)):
-        os.makedirs(os.path.join(CONFIG_PATH, next_server_config_dir))
+        server_config_path = os.path.join(CONFIG_PATH, next_server_config_dir, server_cfg.filename)
+        entry_list_path = os.path.join(CONFIG_PATH, next_server_config_dir, entry_list.filename)
+        server_cfg.save(server_config_path)
+        entry_list.save(entry_list_path)
+        server_cfg_written = True
 
-    server_config_path = os.path.join(CONFIG_PATH, next_server_config_dir, server_cfg.filename)
-    entry_list_path = os.path.join(CONFIG_PATH, next_server_config_dir, entry_list.filename)
-    server_cfg.save(server_config_path)
-    entry_list.save(entry_list_path)
-    server_cfg_written = True
+        # Get the new checkin list into the same directory
+        # current_entries = current_entry_list(check_in_sheet_url)
+        # write_current_entry_list(current_entries)
+        entry_list_generated = True
 
-    # Get the new checkin list into the same directory
-    # current_entries = current_entry_list(check_in_sheet_url)
-    # write_current_entry_list(current_entries)
-    entry_list_generated = True
-
-    # Copy the configs to the runnable dir
-    p1 = subprocess.Popen(["cmd", "/C", "DIR /B", CONFIG_PATH], stdout=subprocess.PIPE)
-    output = sorted(p1.communicate()[0])
-    server_config_dir_name = output[0]
-    # Copy the server config
-    shutil.copy(server_config_path,
-                os.path.join(CFG_PATH, SERVER_CFG))
-    # Copy the entry list
-    shutil.copy(entry_list_path,
-                os.path.join(CFG_PATH, ENTRY_LIST))
-    # shutil.copy(os.path.join(CONFIG_PATH, server_config_dir_name, ENTRY_LIST),
-    #             os.path.join(CFG_PATH, ENTRY_LIST))
-
+        # Copy the configs to the runnable dir
+        p1 = subprocess.Popen(["cmd", "/C", "DIR /B", CONFIG_PATH], stdout=subprocess.PIPE)
+        output = sorted(p1.communicate()[0])
+        server_config_dir_name = output[0]
+        # Copy the server config
+        shutil.copy(server_config_path,
+                    os.path.join(CFG_PATH, SERVER_CFG))
+        # Copy the entry list
+        shutil.copy(entry_list_path,
+                    os.path.join(CFG_PATH, ENTRY_LIST))
+        # shutil.copy(os.path.join(CONFIG_PATH, server_config_dir_name, ENTRY_LIST),
+        #             os.path.join(CFG_PATH, ENTRY_LIST))
+    except Exception as e:
+        logging.exception(e.message)
+        logging.exception('Continuing to load, new uploads required.')
     return template('upload_status',
                     server_cfg_written=server_cfg_written,
                     entry_list_generated=entry_list_generated)
