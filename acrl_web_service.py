@@ -101,10 +101,12 @@ def upload_configs():
         entry_list.save(entry_list_path)
         entry_list_generated = True
 
-        # Copy the server config to the active config directory
+        # Remove the current configs
+        os.remove(os.path.join(CONFIG_PATH, SERVER_CFG))
+        os.remove(os.path.join(CONFIG_PATH, ENTRY_LIST))
+        # Copy the new configs to the active config directory
         shutil.copy(server_config_path,
                     os.path.join(CONFIG_PATH, SERVER_CFG))
-        # Copy the entry list to the active config directory
         shutil.copy(entry_list_path,
                     os.path.join(CONFIG_PATH, ENTRY_LIST))
     except Exception as e:
