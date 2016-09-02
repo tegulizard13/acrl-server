@@ -143,6 +143,15 @@ def start_server():
 
 # Fragile if you rely on the PID file. Scorched earth, motherfucker.
 def kill_server():
+    # Kill ACRL_Plugin
+    p = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
+    output = p.communicate()[0]
+    # Get a list of acrl server (ACRL_Plugin.exe) pids
+    ac_plugin_pids = [name.split()[1] for name in output.strip().split('\n') if name.split()[0] == 'ACRL_Plugin.exe']
+    for pid in ac_plugin_pids:
+        k = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
+
+    # Kill race server
     p = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
     output = p.communicate()[0]
     # Get a list of acrl server (acServer.exe) pids
