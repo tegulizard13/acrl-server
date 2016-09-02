@@ -118,8 +118,8 @@ def upload_configs():
 def start_server():
     os.chdir(SERVER_PATH)
     # If Eu (or if the bat file exists, run stracker
-    if os.path.isfile(os.path.join(SERVER_PATH, 'stracker.bat')):
-        p = subprocess.Popen(['stracker.bat', 'arg1', 'arg2'],
+    if os.path.isfile(os.path.join(SERVER_PATH, 'start-stracker.cmd')):
+        p = subprocess.Popen(['start-stracker.cmd'],
                              close_fds=True,
                              creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
     # Run the ACRL Plugin for GT3
@@ -142,6 +142,7 @@ def start_server():
 
 
 # Fragile if you rely on the PID file. Scorched earth, motherfucker.
+# TODO: currently will not kill stracker, process must be killed manually...
 def kill_server():
     # Kill ACRL_Plugin
     p = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
