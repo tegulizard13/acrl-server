@@ -116,9 +116,19 @@ def upload_configs():
 
 # Start the server process
 def start_server():
-    ac_path = '"{}"'.format(os.path.join(SERVER_PATH, AC_SERVER_EXE))
     os.chdir(SERVER_PATH)
-    # TODO: For now call the bat file so the log gets created for us.
+    # If Eu (or if the bat file exists, run stracker
+    if os.path.isfile(os.path.join(SERVER_PATH, 'stracker.bat')):
+        p = subprocess.Popen(['stracker.bat', 'arg1', 'arg2'],
+                             close_fds=True,
+                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+    # Run the ACRL Plugin for GT3
+    # TODO: update so gt3 values are not hardcoded in
+    p = subprocess.Popen(['ACRL_Plugin.exe', '60', '15', 'standing'],
+                         close_fds=True,
+                         creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+    time.sleep(1)
+    # TODO: For now call the bat file so the log gets created for us
     p = subprocess.Popen([AC_SERVER_BAT],
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
