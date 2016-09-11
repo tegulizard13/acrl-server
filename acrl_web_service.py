@@ -14,6 +14,8 @@ import logging
 SERVER_PATH = 'C:\ACServer'
 AC_SERVER_EXE = 'acServer.exe'
 AC_SERVER_BAT = 'acServer.bat'
+STRACKER_EXE = 'stracker.exe'
+ACRL_PLUGIN_EXE = 'ACRL_Plugin.exe'
 
 # Configuration paths and files
 PRESETS_PATH = os.path.join(SERVER_PATH, 'presets')
@@ -141,24 +143,25 @@ def start_server():
     return server_running()
 
 
-# Fragile if you rely on the PID file. Scorched earth, motherfucker.
-# TODO: currently will not kill stracker, process must be killed manually...
-def kill_server():
-    # Kill ACRL_Plugin
+# Kills all processes with the name specified
+def kill_process(process_name):
     p = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
     output = p.communicate()[0]
-    # Get a list of acrl server (ACRL_Plugin.exe) pids
-    ac_plugin_pids = [name.split()[1] for name in output.strip().split('\n') if name.split()[0] == 'ACRL_Plugin.exe']
-    for pid in ac_plugin_pids:
+    # Get a list of pids for the specified name
+    process_pids = [name.split()[1] for name in output.strip().split('\n') if name.split()[0] == process_name]
+    # Kill the processes found, if any
+    for pid in process_pids:
         k = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
 
+
+# Fragile if you rely on the PID file. Scorched earth, motherfucker.
+def kill_server():
+    # Kill stracker
+    kill_process(STRACKER_EXE)
+    # Kill ACRL_Plugin
+    kill_process(ACRL_PLUGIN_EXE)
     # Kill race server
-    p = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
-    output = p.communicate()[0]
-    # Get a list of acrl server (acServer.exe) pids
-    ac_server_pids = [name.split()[1] for name in output.strip().split('\n') if name.split()[0] == AC_SERVER_EXE]
-    for pid in ac_server_pids:
-        k = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
+    kill_process(AC_SERVER_EXE)
 
     # Return True if the server is stopped
     if not server_running():
