@@ -119,7 +119,7 @@ def upload_configs():
 # Start the server process
 def start_server():
     os.chdir(SERVER_PATH)
-    # If Eu (or if the bat file exists, run stracker
+    # If Eu (or if the bat file exists, run stracker)
     if os.path.isfile(os.path.join(SERVER_PATH, 'start-stracker.cmd')):
         p = subprocess.Popen(['start-stracker.cmd'],
                              close_fds=True,
@@ -130,8 +130,9 @@ def start_server():
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
     time.sleep(1)
-    # TODO: For now call the bat file so the log gets created for us
-    p = subprocess.Popen([AC_SERVER_BAT],
+    # Create a new log file with a timestamp
+    log_name = 'acServer.{}.log'.format(time.strftime("%m.%d.%Y.%H.%M.%S"))
+    p = subprocess.Popen(['{} 1> acServer.{}.log 2>&1'.format(AC_SERVER_EXE, log_name)],
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
 
