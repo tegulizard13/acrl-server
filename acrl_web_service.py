@@ -12,10 +12,12 @@ import logging
 
 # Windows install path and server exe
 SERVER_PATH = 'C:\ACServer'
+CUT_PLUGIN_PATH = os.path.join(SERVER_PATH, 'CutPlugin')
 AC_SERVER_EXE = 'acServer.exe'
 AC_SERVER_BAT = 'acServer.bat'
 STRACKER_EXE = 'stracker.exe'
 ACRL_PLUGIN_EXE = 'ACRL_Plugin.exe'
+CUT_PLUGIN_EXE = 'ACCutDetectorPlugin.exe'
 
 # Configuration paths and files
 PRESETS_PATH = os.path.join(SERVER_PATH, 'presets')
@@ -124,15 +126,26 @@ def start_server():
         p = subprocess.Popen(['start-stracker.cmd'],
                              close_fds=True,
                              creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+    time.sleep(1)
+
     # Run the ACRL Plugin for GT3
     # TODO: update so gt3 values are not hardcoded in
-    p = subprocess.Popen(['ACRL_Plugin.exe', '60', '15', 'standing'],
+    p = subprocess.Popen([ACRL_PLUGIN_EXE, '60', '15', 'standing'],
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
     time.sleep(1)
+
+    # Run ACCutDetectorPlugin.exe in CutPlugin folder
+    os.chdir(CUT_PLUGIN_PATH)
+    p = subprocess.Popen([CUT_PLUGIN_EXE],
+                         close_fds=True,
+                         creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+    time.sleep(1)
+    os.chdir(SERVER_PATH)
+
     # Create a new log file with a timestamp
     log_name = 'acServer.{}.log'.format(time.strftime("%m.%d.%Y.%H.%M.%S"))
-    p = subprocess.Popen(['{} 1> acServer.{}.log 2>&1'.format(AC_SERVER_EXE, log_name)],
+    p = subprocess.Popen(['{} 1> {} 2>&1'.format(AC_SERVER_EXE, log_name)],
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
 
@@ -157,12 +170,14 @@ def kill_process(process_name):
 
 # Fragile if you rely on the PID file. Scorched earth, motherfucker.
 def kill_server():
-    # Kill stracker
-    kill_process(STRACKER_EXE)
-    # Kill ACRL_Plugin
-    kill_process(ACRL_PLUGIN_EXE)
     # Kill race server
     kill_process(AC_SERVER_EXE)
+    # Kill cut detector
+    kill_process(CUT_PLUGIN_EXE)
+    # Kill ACRL_Plugin
+    kill_process(ACRL_PLUGIN_EXE)
+    # Kill STracker
+    kill_process(STRACKER_EXE)
 
     # Return True if the server is stopped
     if not server_running():
