@@ -1,6 +1,7 @@
 # TODO: Process handling using PIDs to support multiple servers on one machine
 # TODO: Fix logging so that it works correctly, it isn't logging now...
 # TODO: Links to race log files for after the race.
+# TODO: Multi-server support
 
 #pip install bottle, requests, gspread
 """
@@ -122,7 +123,7 @@ def upload_configs():
                     entry_list_generated=entry_list_generated)
 
 
-# Start the server process
+# Start the server processes
 def start_server():
     os.chdir(SERVER_PATH)
     # If Eu (or if the bat file exists, run stracker)
@@ -131,13 +132,16 @@ def start_server():
                              close_fds=True,
                              creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
     time.sleep(1)
+    process_pids[STRACKER_EXE] = p.pid
 
     # Run the ACRL Plugin for GT3
     # TODO: update so gt3 values are not hardcoded in
+    # TODO: get and save the pids for each of the processes
     p = subprocess.Popen([ACRL_PLUGIN_EXE, '60', '15', 'standing'],
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
     time.sleep(1)
+    process_pids[ACRL_PLUGIN_EXE] = p.pid
 
     # Run ACCutDetectorPlugin.exe in CutPlugin folder
     os.chdir(CUT_PLUGIN_PATH)
@@ -145,13 +149,17 @@ def start_server():
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
     time.sleep(1)
+    process_pids[CUT_PLUGIN_EXE] = p.pid
     os.chdir(SERVER_PATH)
 
-    # Create a new log file with a timestamp
+    # Create a new acserver log file with a timestamp
     log_name = 'acServer.{}.log'.format(time.strftime("%m.%d.%Y.%H.%M.%S"))
+    # Run the AC Server
     p = subprocess.Popen(['{} 1> {} 2>&1'.format(AC_SERVER_EXE, log_name)],
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+    time.sleep(1)
+    process_pids[AC_SERVER_EXE] = p.pid
 
     # file modification date and pid are stored
     with open(os.path.join(CONFIG_PATH, 'PID'), 'w') as pid_file:
@@ -248,4 +256,10 @@ def write_current_entry_list(entry_list_string):
         entry_list_ini.write(entry_list_string)
 
 if __name__ == "__main__":
+    # Keep track of important values
+    #PIDs
+    process_pids = {AC_SERVER_EXE: None,
+                    ACRL_PLUGIN_EXE: None,
+                    CUT_PLUGIN_EXE: None,
+                    STRACKER_EXE: None}
     run(acrl, host='0.0.0.0', port=8080)
