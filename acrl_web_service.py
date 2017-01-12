@@ -1,7 +1,11 @@
+# TODO: Process handling using PIDs to support multiple servers on one machine
+# TODO: Fix logging so that it works correctly, it isn't logging now...
+# TODO: Links to race log files for after the race.
+
 #pip install bottle, requests, gspread
-'''
+"""
 Bottle server with api methods for starting everything
-'''
+"""
 from bottle import Bottle, run, request, template, view
 import subprocess
 import os
@@ -217,6 +221,7 @@ def current_entry_list(checkin_url):
     # Get the check-in list from google sheets. use gspread
     checkin_list = [] #list of username strings who checked in
 
+    credentials = "google credentials"
     gc = gspread.authorize(credentials)
     # Open a worksheet from spreadsheet with one shot
     wks = gc.open("Where is the money Lebowski?").sheet1
