@@ -161,10 +161,6 @@ def start_server():
     time.sleep(1)
     process_pids[AC_SERVER_EXE] = p.pid
 
-    # file modification date and pid are stored
-    with open(os.path.join(CONFIG_PATH, 'PID'), 'w') as pid_file:
-        pid_file.write(str(p.pid))
- 
     # Return True if server is running (may be misleading)
     return server_running()
 
