@@ -132,16 +132,15 @@ def start_server():
                              close_fds=True,
                              creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
     time.sleep(1)
-    process_pids[STRACKER_EXE] = p.pid
+    server_pids[STRACKER_EXE] = p.pid
 
     # Run the ACRL Plugin for GT3
-    # TODO: update so gt3 values are not hardcoded in
-    # TODO: get and save the pids for each of the processes
+    # TODO: update so gt3 timing values are not hardcoded in
     p = subprocess.Popen([ACRL_PLUGIN_EXE, '60', '15', 'standing'],
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
     time.sleep(1)
-    process_pids[ACRL_PLUGIN_EXE] = p.pid
+    server_pids[ACRL_PLUGIN_EXE] = p.pid
 
     # Run ACCutDetectorPlugin.exe in CutPlugin folder
     os.chdir(CUT_PLUGIN_PATH)
@@ -149,7 +148,7 @@ def start_server():
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
     time.sleep(1)
-    process_pids[CUT_PLUGIN_EXE] = p.pid
+    server_pids[CUT_PLUGIN_EXE] = p.pid
     os.chdir(SERVER_PATH)
 
     # Create a new acserver log file with a timestamp
@@ -159,33 +158,27 @@ def start_server():
                          close_fds=True,
                          creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
     time.sleep(1)
-    process_pids[AC_SERVER_EXE] = p.pid
+    server_pids[AC_SERVER_EXE] = p.pid
 
     # Return True if server is running (may be misleading)
     return server_running()
 
 
 # Kills all processes with the name specified
-def kill_process(process_name):
-    p = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
-    output = p.communicate()[0]
-    # Get a list of pids for the specified name
-    process_pids = [name.split()[1] for name in output.strip().split('\n') if name.split()[0] == process_name]
-    # Kill the processes found, if any
-    for pid in process_pids:
-        k = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
+def kill_process(pid):
+    p = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
 
 
 # Fragile if you rely on the PID file. Scorched earth, motherfucker.
 def kill_server():
     # Kill race server
-    kill_process(AC_SERVER_EXE)
+    kill_process(server_pids[AC_SERVER_EXE])
     # Kill cut detector
-    kill_process(CUT_PLUGIN_EXE)
+    kill_process(server_pids[CUT_PLUGIN_EXE])
     # Kill ACRL_Plugin
-    kill_process(ACRL_PLUGIN_EXE)
+    kill_process(server_pids[ACRL_PLUGIN_EXE])
     # Kill STracker
-    kill_process(STRACKER_EXE)
+    kill_process(server_pids[STRACKER_EXE])
 
     # Return True if the server is stopped
     if not server_running():
@@ -205,7 +198,7 @@ def restart_server():
 def instance_running():
     return True
 
-
+# TODO: make this use the pids
 # Check to see if the server exe is in the list of running programs
 def server_running():
     server_is_running = False
@@ -254,7 +247,7 @@ def write_current_entry_list(entry_list_string):
 if __name__ == "__main__":
     # Keep track of important values
     #PIDs
-    process_pids = {AC_SERVER_EXE: None,
+    server_pids = {AC_SERVER_EXE: None,
                     ACRL_PLUGIN_EXE: None,
                     CUT_PLUGIN_EXE: None,
                     STRACKER_EXE: None}
