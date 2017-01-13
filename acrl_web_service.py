@@ -7,13 +7,15 @@
 """
 Bottle server with api methods for starting everything
 """
-from bottle import Bottle, run, request, template, view
-import subprocess
+import argparse
+import logging
 import os
 import shutil
-import gspread
+import subprocess
 import time
-import logging
+
+import gspread
+from bottle import Bottle, run, request, template, view
 
 # Windows install path and server exe
 SERVER_PATH = 'C:\ACServer'
@@ -248,12 +250,23 @@ def write_current_entry_list(entry_list_string):
         entry_list_ini.write(entry_list_string)
 
 if __name__ == "__main__":
-    # Keep track of important values
+    # Get the args
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-p",
+                        "--port",
+                        type=int,
+                        help="Web server port for this server instance")
+    args = parser.parse_args()
+
+    # Important values to keep track of
+    web_server_port = 8080
+    if args.port:
+        web_server_port = args.port
+
     server_pids = {AC_SERVER_EXE: None,
                    ACRL_PLUGIN_EXE: None,
                    CUT_PLUGIN_EXE: None,
                    STRACKER_EXE: None}
-    port = 8080
 
     # TODO: accept a port as an arg, allow multiple servers to run
-    run(acrl, host='0.0.0.0', port=port)
+    run(acrl, host='0.0.0.0', port=web_server_port)
