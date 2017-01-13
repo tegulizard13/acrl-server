@@ -198,17 +198,20 @@ def restart_server():
 def instance_running():
     return True
 
+
 # TODO: make this use the pids
-# Check to see if the server exe is in the list of running programs
+# Check to see if the ac server exe is in the list of running programs
 def server_running():
     server_is_running = False
     # Remember, this part is Windows only
     p1 = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
     output = p1.communicate()[0]
-    # Get a list of process names
-    programs_running = [name.split()[0] for name in output.strip().split('\n')]
-    if "acServer.exe" in programs_running:
-        server_is_running = True
+    # Get a list of process names and pids. Check if there is a match for the AC Server.
+    for task_line in output.strip().split('\n'):
+        split_line = task_line.split()
+        if split_line[0] == AC_SERVER_EXE and split_line[1] == server_pids[AC_SERVER_EXE]:
+            server_is_running = True
+
     return server_is_running
 
 
@@ -246,9 +249,11 @@ def write_current_entry_list(entry_list_string):
 
 if __name__ == "__main__":
     # Keep track of important values
-    #PIDs
     server_pids = {AC_SERVER_EXE: None,
-                    ACRL_PLUGIN_EXE: None,
-                    CUT_PLUGIN_EXE: None,
-                    STRACKER_EXE: None}
-    run(acrl, host='0.0.0.0', port=8080)
+                   ACRL_PLUGIN_EXE: None,
+                   CUT_PLUGIN_EXE: None,
+                   STRACKER_EXE: None}
+    port = 8080
+
+    # TODO: accept a port as an arg, allow multiple servers to run
+    run(acrl, host='0.0.0.0', port=port)
