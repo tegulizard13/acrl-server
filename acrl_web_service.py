@@ -17,21 +17,27 @@ import time
 import gspread
 from bottle import Bottle, run, request, template, view
 
-# Windows install path and server exe
-SERVER_PATH = 'C:\ACServer'
-CUT_PLUGIN_PATH = os.path.join(SERVER_PATH, 'CutPlugin')
-AC_SERVER_EXE = 'acServer.exe'
-AC_SERVER_BAT = 'acServer.bat'
-STRACKER_EXE = 'stracker.exe'
-ACRL_PLUGIN_EXE = 'ACRL_Plugin.exe'
-CUT_PLUGIN_EXE = 'ACCutDetectorPlugin.exe'
+
+"""
+folders: EU1, EU2, EU3, EU4 in C:\Users\Administrator\Desktop\
+
+
+"""
+
+
+
+
 
 # Configuration paths and files
+SERVER_PATH = 'C:\Users\Administrator\Desktop'
 PRESETS_PATH = os.path.join(SERVER_PATH, 'presets')
 STAGING_PATH = os.path.join(PRESETS_PATH, 'staging')
 CONFIG_PATH = os.path.join(SERVER_PATH, 'cfg')
 ENTRY_LIST = 'entry_list.ini'
 SERVER_CFG = 'server_cfg.ini'
+
+CUT_PLUGIN_PATH = os.path.join(SERVER_PATH, 'CutPlugin')
+AC_SERVER_BAT = 'acServer.bat'
 
 # HTTP Verbs
 POST = "POST"
@@ -61,8 +67,168 @@ ch.setFormatter(console_formatter)
 root_logger.addHandler(fh)
 root_logger.addHandler(ch)
 
-# Our server
-acrl = Bottle()
+
+class ServerApp(object):
+    def __init__(self):
+        self._base_path = 'C:\Users\Administrator\Desktop'
+        self.pid = None
+        self.directory = None
+        self.executable = None
+        self.launcher = None
+
+    @property
+    def executable_path(self):
+        path_parts = [self._base_path,
+                      self.directory if self.directory else '',
+                      self.executable]
+        full_path = os.path.join(*path_parts)
+        return full_path
+
+
+class ACServer(ServerApp):
+    def __init__(self):
+        super(ACServer, self).__init__()
+        self.executable = 'acServer.exe'
+
+
+class Stracker(ServerApp):
+    def __init__(self):
+        super(Stracker, self).__init__()
+        self.executable = 'stracker.exe'
+
+
+class ACRLPlugin(ServerApp):
+    def __init__(self):
+        super(ACRLPlugin, self).__init__()
+        self.executable = 'ACRL_Plugin.exe'
+
+
+class CutPlugin(ServerApp):
+    def __init__(self):
+        super(CutPlugin, self).__init__()
+        self.executable = 'ACCutDetectorPlugin.exe'
+
+
+class ACRLServer(object):
+    def __init__(self, http_port):
+        self.http_port = http_port
+
+    # Start the server processes
+    def start_server(self):
+        os.chdir(SERVER_PATH)
+        # If Eu (or if the bat file exists, run stracker)
+        if os.path.isfile(os.path.join(SERVER_PATH, 'start-stracker.cmd')):
+            p = subprocess.Popen(['start-stracker.cmd'],
+                                 close_fds=True,
+                                 creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        time.sleep(1)
+        server_pids[STRACKER_EXE] = p.pid
+
+        # Run the ACRL Plugin for GT3
+        # TODO: update so gt3 timing values are not hardcoded in
+        p = subprocess.Popen([ACRL_PLUGIN_EXE, '60', '15', 'standing'],
+                             close_fds=True,
+                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        time.sleep(1)
+        server_pids[ACRL_PLUGIN_EXE] = p.pid
+
+        # Run ACCutDetectorPlugin.exe in CutPlugin folder
+        os.chdir(CUT_PLUGIN_PATH)
+        p = subprocess.Popen([CUT_PLUGIN_EXE],
+                             close_fds=True,
+                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        time.sleep(1)
+        server_pids[CUT_PLUGIN_EXE] = p.pid
+        os.chdir(SERVER_PATH)
+
+        # Create a new acserver log file with a timestamp
+        log_name = 'acServer.{}.log'.format(time.strftime("%m.%d.%Y.%H.%M.%S"))
+        # Run the AC Server
+        p = subprocess.Popen(['{} 1> {} 2>&1'.format(AC_SERVER_EXE, log_name)],
+                             close_fds=True,
+                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        time.sleep(1)
+        server_pids[AC_SERVER_EXE] = p.pid
+
+        # Return True if server is running (may be misleading)
+        return server_running()
+
+    # Kills all processes with the name specified
+    def kill_process(self, pid):
+        p = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
+
+    # Fragile if you rely on the PID file. Scorched earth, motherfucker.
+    def kill_server(self):
+        # Kill race server
+        kill_process(server_pids[AC_SERVER_EXE])
+        # Kill cut detector
+        kill_process(server_pids[CUT_PLUGIN_EXE])
+        # Kill ACRL_Plugin
+        kill_process(server_pids[ACRL_PLUGIN_EXE])
+        # Kill STracker
+        kill_process(server_pids[STRACKER_EXE])
+
+        # Return True if the server is stopped
+        if not server_running():
+            # TODO: upload logs here?
+            return True
+        return False
+
+    def restart_server(self):
+        if not kill_server():
+            return False
+        time.sleep(1)
+        return start_server()
+
+    # lol
+    def instance_running(self):
+        return True
+
+    # Check to see if the ac server exe is in the list of running programs
+    def server_running(self):
+        server_is_running = False
+        # Remember, this part is Windows only
+        p1 = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
+        output = p1.communicate()[0]
+        # Get a list of process names and pids. Check if there is a match for the AC Server.
+        for task_line in output.strip().split('\n'):
+            split_line = task_line.split()
+            if split_line[0] == AC_SERVER_EXE and split_line[1] == server_pids[AC_SERVER_EXE]:
+                server_is_running = True
+
+        return server_is_running
+
+    # Returns new entry list as a string
+    # TODO: Finish implementing at some point
+    def current_entry_list(self, checkin_url):
+        # Get the check-in list from google sheets. use gspread
+        checkin_list = []  # list of username strings who checked in
+
+        credentials = "google credentials"
+        gc = gspread.authorize(credentials)
+        # Open a worksheet from spreadsheet with one shot
+        wks = gc.open("Where is the money Lebowski?").sheet1
+        wks.update_acell('B2', "it's down there somewhere, let me take another look.")
+        # Fetch a cell range
+        cell_list = wks.range('A1:B7')
+
+        # Get the full entry list of all members (also store as a google doc?)
+        racers = {'example_racer_name': 'full_entry_as_string'}
+
+        entries = []
+        for checked_in in checkin_list:
+            entries.append(racers[checked_in])
+
+        return "\n\n".join(entries)
+
+    # Writes unsafely to the current config directory
+    def write_current_entry_list(self, entry_list_string):
+        p1 = subprocess.Popen(["cmd", "/C", "DIR /B", PRESETS_PATH], stdout=subprocess.PIPE)
+        output = sorted(p1.communicate()[0])
+        server_config_dir_name = output[0]
+        with open(os.path.join(PRESETS_PATH, server_config_dir_name, ENTRY_LIST), 'w') as entry_list_ini:
+            entry_list_ini.write(entry_list_string)
+
 
 
 @acrl.route('/about', method=GET)
@@ -125,130 +291,6 @@ def upload_configs():
                     entry_list_generated=entry_list_generated)
 
 
-# Start the server processes
-def start_server():
-    os.chdir(SERVER_PATH)
-    # If Eu (or if the bat file exists, run stracker)
-    if os.path.isfile(os.path.join(SERVER_PATH, 'start-stracker.cmd')):
-        p = subprocess.Popen(['start-stracker.cmd'],
-                             close_fds=True,
-                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-    time.sleep(1)
-    server_pids[STRACKER_EXE] = p.pid
-
-    # Run the ACRL Plugin for GT3
-    # TODO: update so gt3 timing values are not hardcoded in
-    p = subprocess.Popen([ACRL_PLUGIN_EXE, '60', '15', 'standing'],
-                         close_fds=True,
-                         creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-    time.sleep(1)
-    server_pids[ACRL_PLUGIN_EXE] = p.pid
-
-    # Run ACCutDetectorPlugin.exe in CutPlugin folder
-    os.chdir(CUT_PLUGIN_PATH)
-    p = subprocess.Popen([CUT_PLUGIN_EXE],
-                         close_fds=True,
-                         creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-    time.sleep(1)
-    server_pids[CUT_PLUGIN_EXE] = p.pid
-    os.chdir(SERVER_PATH)
-
-    # Create a new acserver log file with a timestamp
-    log_name = 'acServer.{}.log'.format(time.strftime("%m.%d.%Y.%H.%M.%S"))
-    # Run the AC Server
-    p = subprocess.Popen(['{} 1> {} 2>&1'.format(AC_SERVER_EXE, log_name)],
-                         close_fds=True,
-                         creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-    time.sleep(1)
-    server_pids[AC_SERVER_EXE] = p.pid
-
-    # Return True if server is running (may be misleading)
-    return server_running()
-
-
-# Kills all processes with the name specified
-def kill_process(pid):
-    p = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
-
-
-# Fragile if you rely on the PID file. Scorched earth, motherfucker.
-def kill_server():
-    # Kill race server
-    kill_process(server_pids[AC_SERVER_EXE])
-    # Kill cut detector
-    kill_process(server_pids[CUT_PLUGIN_EXE])
-    # Kill ACRL_Plugin
-    kill_process(server_pids[ACRL_PLUGIN_EXE])
-    # Kill STracker
-    kill_process(server_pids[STRACKER_EXE])
-
-    # Return True if the server is stopped
-    if not server_running():
-        #TODO: upload logs here?
-        return True
-    return False
-
-
-def restart_server():
-    if not kill_server():
-        return False
-    time.sleep(1)
-    return start_server()
-
-
-# lol
-def instance_running():
-    return True
-
-
-# TODO: make this use the pids
-# Check to see if the ac server exe is in the list of running programs
-def server_running():
-    server_is_running = False
-    # Remember, this part is Windows only
-    p1 = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
-    output = p1.communicate()[0]
-    # Get a list of process names and pids. Check if there is a match for the AC Server.
-    for task_line in output.strip().split('\n'):
-        split_line = task_line.split()
-        if split_line[0] == AC_SERVER_EXE and split_line[1] == server_pids[AC_SERVER_EXE]:
-            server_is_running = True
-
-    return server_is_running
-
-
-# Returns new entry list as a string
-# TODO: Finish implementing at some point
-def current_entry_list(checkin_url):
-    # Get the check-in list from google sheets. use gspread
-    checkin_list = [] #list of username strings who checked in
-
-    credentials = "google credentials"
-    gc = gspread.authorize(credentials)
-    # Open a worksheet from spreadsheet with one shot
-    wks = gc.open("Where is the money Lebowski?").sheet1
-    wks.update_acell('B2', "it's down there somewhere, let me take another look.")
-    # Fetch a cell range
-    cell_list = wks.range('A1:B7')
-
-    # Get the full entry list of all members (also store as a google doc?)
-    racers = {'example_racer_name': 'full_entry_as_string'}
-
-    entries = []
-    for checked_in in checkin_list:
-        entries.append(racers[checked_in])
-
-    return "\n\n".join(entries)
-
-
-# Writes unsafely to the current config directory
-def write_current_entry_list(entry_list_string):
-    p1 = subprocess.Popen(["cmd", "/C", "DIR /B", PRESETS_PATH], stdout=subprocess.PIPE)
-    output = sorted(p1.communicate()[0])
-    server_config_dir_name = output[0]
-    with open(os.path.join(PRESETS_PATH, server_config_dir_name, ENTRY_LIST), 'w') as entry_list_ini:
-        entry_list_ini.write(entry_list_string)
-
 if __name__ == "__main__":
     # Get the args
     parser = argparse.ArgumentParser()
@@ -263,10 +305,16 @@ if __name__ == "__main__":
     if args.port:
         web_server_port = args.port
 
-    server_pids = {AC_SERVER_EXE: None,
-                   ACRL_PLUGIN_EXE: None,
-                   CUT_PLUGIN_EXE: None,
-                   STRACKER_EXE: None}
-
-    # TODO: accept a port as an arg, allow multiple servers to run
+    # TODO: allow multiple servers to run
+    # Our server
+    acrl = Bottle()
     run(acrl, host='0.0.0.0', port=web_server_port)
+
+
+
+"""
+Start normally, with a flag to indicate if it should just check a normal location
+otherwise, start and wait for some other mode of config
+
+add methods to add server, remove server...
+"""
