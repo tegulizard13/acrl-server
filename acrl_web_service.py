@@ -84,29 +84,39 @@ class ServerApp(object):
         full_path = os.path.join(*path_parts)
         return full_path
 
+    def run(self):
+        pass
+
 
 class ACServer(ServerApp):
     def __init__(self):
         super(ACServer, self).__init__()
         self.executable = 'acServer.exe'
+        self.launcher = 'Start - Server.bat'
 
 
 class Stracker(ServerApp):
     def __init__(self):
         super(Stracker, self).__init__()
         self.executable = 'stracker.exe'
+        self.launchers = ['Start - Plugin - Stracker - L1.bat',
+                          'Start - Plugin - Stracker - L2.bat',
+                          'Start - Plugin - Stracker - L3.bat']
+        self.launcher = ''
 
 
-class ACRLPlugin(ServerApp):
+class RollingStartPlugin(ServerApp):
     def __init__(self):
-        super(ACRLPlugin, self).__init__()
-        self.executable = 'ACRL_Plugin.exe'
+        super(RollingStartPlugin, self).__init__()
+        self.executable = 'RollingStartPlugin.exe'
+        self.launcher = 'Start - Plugin - Rolling L2.bat'
 
 
 class CutPlugin(ServerApp):
     def __init__(self):
         super(CutPlugin, self).__init__()
         self.executable = 'ACCutDetectorPlugin.exe'
+        self.launcher = 'Start - Plugin - Cut - L1.bat'
 
 
 class ACRLServer(object):
@@ -169,16 +179,16 @@ class ACRLServer(object):
         kill_process(server_pids[STRACKER_EXE])
 
         # Return True if the server is stopped
-        if not server_running():
+        if not self.server_running():
             # TODO: upload logs here?
             return True
         return False
 
     def restart_server(self):
-        if not kill_server():
+        if not self.kill_server():
             return False
         time.sleep(1)
-        return start_server()
+        return self.start_server()
 
     # lol
     def instance_running(self):
@@ -201,6 +211,7 @@ class ACRLServer(object):
     # Returns new entry list as a string
     # TODO: Finish implementing at some point
     def current_entry_list(self, checkin_url):
+        '''
         # Get the check-in list from google sheets. use gspread
         checkin_list = []  # list of username strings who checked in
 
@@ -220,6 +231,8 @@ class ACRLServer(object):
             entries.append(racers[checked_in])
 
         return "\n\n".join(entries)
+        '''
+        pass
 
     # Writes unsafely to the current config directory
     def write_current_entry_list(self, entry_list_string):
