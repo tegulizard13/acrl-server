@@ -3,7 +3,7 @@
 # TODO: Links to race log files for after the race.
 # TODO: Multi-server support
 
-#pip install bottle, requests, gspread
+# pip install bottle, requests, gspread
 """
 Bottle server with api methods for starting everything
 """
@@ -14,14 +14,13 @@ import shutil
 import subprocess
 import time
 
-import gspread
+# import gspread
 from bottle import Bottle, run, request, template, view
 
 
 # Configuration paths and files
 SERVER_PATH = 'C:\Users\Administrator\Desktop'
 PLUGIN_PATH = os.path.join(SERVER_PATH, 'Plugins')
-
 
 REGION_NA = 'NA'
 REGION_EU = 'EU'
@@ -33,8 +32,6 @@ CONFIG_PATH = os.path.join(SERVER_PATH, 'cfg')
 ENTRY_LIST = 'entry_list.ini'
 SERVER_CFG = 'server_cfg.ini'
 
-CUT_PLUGIN_PATH = os.path.join(SERVER_PATH, 'CutPlugin')
-AC_SERVER_BAT = 'acServer.bat'
 
 # HTTP Verbs
 POST = "POST"
@@ -93,6 +90,7 @@ class ServerApp(object):
         self.executable = None
         self.launcher = None
 
+    '''
     @property
     def executable_path(self):
         path_parts = [self.base_path,
@@ -100,11 +98,25 @@ class ServerApp(object):
                       self.executable]
         full_path = os.path.join(*path_parts)
         return full_path
+    '''
+
+    @property
+    def running(self):
+        application_running = False
+        p = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
+        output = p.communicate()[0]
+
+        # Get a list of process names and pids. Check if there is a match for the application.
+        for task_line in output.strip().split('\n'):
+            split_line = task_line.split()
+            if split_line[0] == self.executable and split_line[1] == self.pid:
+                application_running = True
+
+        return application_running
 
     def run(self):
         """
         Runs the application executable directly with args. Gets the PID.
-        :return: Boolean True to indicate success
         """
         pass
 
@@ -125,7 +137,7 @@ class ServerApp(object):
         return process_running
 
     def kill(self):
-        pass
+        p = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(self.pid), "/f"], stdout=subprocess.PIPE)
 
 
 class ACServer(ServerApp):
@@ -221,12 +233,12 @@ class ACRLServer(object):
 
         if self.run_cut_plugin:
             self.cut_plugin = CutPlugin()
-            self.cut_plugin.run_launcher()
+            self.cut_plugin.run()
             app_level += 1
 
         if self.run_rolling_start_plugin:
             self.rolling_start_plugin = RollingStartPlugin()
-            self.rolling_start_plugin.run_launcher()
+            self.rolling_start_plugin.run()
             app_level += 1
 
         if self.run_stracker:
@@ -234,27 +246,29 @@ class ACRLServer(object):
             self.stracker.run_launcher()
 
         self.ac_server = ACServer()
-        self.ac_server.run_launcher()
+        self.ac_server.run()
 
-        # Return True if server is running (may be misleading)
+        # Return True if server is running
         return self.server_running()
 
-    # Fragile if you rely on the PID file. Scorched earth, motherfucker.
+    # Attempt to kill all server applications by PID
     def kill_server(self):
         # Kill race server
-        kill_process(server_pids[AC_SERVER_EXE])
+        if self.ac_server:
+            self.ac_server.kill()
         # Kill cut detector
-        kill_process(server_pids[CUT_PLUGIN_EXE])
-        # Kill ACRL_Plugin
-        kill_process(server_pids[ACRL_PLUGIN_EXE])
+        if self.cut_plugin:
+            self.cut_plugin.kill()
+        # Kill rolling start plugin
+        if self.rolling_start_plugin:
+            self.rolling_start_plugin.kill()
         # Kill STracker
-        kill_process(server_pids[STRACKER_EXE])
+        if self.stracker:
+            self.stracker.kill()
+        time.sleep(1)
 
         # Return True if the server is stopped
-        if not self.server_running():
-            # TODO: upload logs here?
-            return True
-        return False
+        return not self.server_running()
 
     def restart_server(self):
         if not self.kill_server():
@@ -262,21 +276,24 @@ class ACRLServer(object):
         time.sleep(1)
         return self.start_server()
 
-    # lol
-    def instance_running(self):
-        return True
-
-    # Check to see if the ac server exe is in the list of running programs
     def server_running(self):
-        server_is_running = False
-        # Remember, this part is Windows only
-        p1 = subprocess.Popen(["cmd", "/C", "tasklist"], stdout=subprocess.PIPE)
-        output = p1.communicate()[0]
-        # Get a list of process names and pids. Check if there is a match for the AC Server.
-        for task_line in output.strip().split('\n'):
-            split_line = task_line.split()
-            if split_line[0] == AC_SERVER_EXE and split_line[1] == server_pids[AC_SERVER_EXE]:
-                server_is_running = True
+        """
+        Checks each process for this server and ANDs the statuses
+        :return: Boolean True if all required applications have PIDs in tasklist output
+        """
+        server_is_running = True
+        # Check race server state
+        if self.ac_server:
+            server_is_running = server_is_running and self.ac_server.running
+        # Check cut detector state
+        if self.cut_plugin:
+            server_is_running = server_is_running and self.cut_plugin.running
+        # Check rolling start plugin state
+        if self.rolling_start_plugin:
+            server_is_running = server_is_running and self.rolling_start_plugin.running
+        # Check STracker state
+        if self.stracker:
+            server_is_running = server_is_running and self.stracker.running
 
         return server_is_running
 
