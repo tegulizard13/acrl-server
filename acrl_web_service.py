@@ -18,18 +18,15 @@ import gspread
 from bottle import Bottle, run, request, template, view
 
 
-"""
-folders: EU1, EU2, EU3, EU4 in C:\Users\Administrator\Desktop\
-
-
-"""
-
-
-
-
-
 # Configuration paths and files
 SERVER_PATH = 'C:\Users\Administrator\Desktop'
+PLUGIN_PATH = os.path.join(SERVER_PATH, 'Plugins')
+
+
+REGION_NA = 'NA'
+REGION_EU = 'EU'
+
+
 PRESETS_PATH = os.path.join(SERVER_PATH, 'presets')
 STAGING_PATH = os.path.join(PRESETS_PATH, 'staging')
 CONFIG_PATH = os.path.join(SERVER_PATH, 'cfg')
@@ -69,8 +66,28 @@ root_logger.addHandler(ch)
 
 
 class ServerApp(object):
-    def __init__(self):
-        self._base_path = 'C:\Users\Administrator\Desktop'
+    """
+    Base class for applications running on the host device.
+    """
+    def __init__(self, region, base_dir=None):
+        """
+        :param region: NA or EU, used to determine NA AWS or Rackservice
+
+        :keyword base_dir: NA, or EU1, EU2, EU3, EU4 depending. Otherwise figure it out
+
+        :var base_path: Absolute path to the server base directory
+        :var pid: process Id for the process if running
+        :var directory: Path to the application executable directory relative to _base_path
+        :var executable: Executable file name
+        :var launcher: Windows shell script in _base_path which can be used to run the app
+        """
+
+        if not base_dir:
+            # list the dirs on the desktop to see how many servers there are
+            # make a new folder via a copy or something?
+            raise Exception('need a base dir for now')
+
+        self.base_path = os.path.join(SERVER_PATH, base_dir)
         self.pid = None
         self.directory = None
         self.executable = None
@@ -78,13 +95,36 @@ class ServerApp(object):
 
     @property
     def executable_path(self):
-        path_parts = [self._base_path,
+        path_parts = [self.base_path,
                       self.directory if self.directory else '',
                       self.executable]
         full_path = os.path.join(*path_parts)
         return full_path
 
     def run(self):
+        """
+        Runs the application executable directly with args. Gets the PID.
+        :return: Boolean True to indicate success
+        """
+        pass
+
+    def run_launcher(self):
+        """
+        Runs the application using a windows shell script. No application PID available.
+        :return: Boolean True to indicate success
+        """
+        process_running = False
+        if self.launcher:
+            os.chdir(self.base_path)
+            p = subprocess.Popen([self.launcher],
+                                 close_fds=True,
+                                 creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+            time.sleep(1)
+            self.pid = p.pid
+            process_running = True
+        return process_running
+
+    def kill(self):
         pass
 
 
@@ -94,78 +134,110 @@ class ACServer(ServerApp):
         self.executable = 'acServer.exe'
         self.launcher = 'Start - Server.bat'
 
+    def run(self):
+        os.chdir(SERVER_PATH)
+
+        # get a timestamp for the log files
+        log_suffix = '{}.log'.format(time.strftime("%m.%d.%Y.%H.%M.%S"))
+        log_output = 'logs/session/output-{}'.format(log_suffix)
+        log_error =  'logs/error/error-{}'.format(log_suffix)
+
+        # Run the AC Server
+        ac_run_str = '{} > {} 2> {}'.format(self.executable, log_output, log_error)
+        p = subprocess.Popen([ac_run_str],
+                             close_fds=True,
+                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        time.sleep(1)
+        self.pid = p.pid
+
 
 class Stracker(ServerApp):
-    def __init__(self):
+    def __init__(self, level=1):
         super(Stracker, self).__init__()
         self.executable = 'stracker.exe'
-        self.launchers = ['Start - Plugin - Stracker - L1.bat',
-                          'Start - Plugin - Stracker - L2.bat',
-                          'Start - Plugin - Stracker - L3.bat']
-        self.launcher = ''
+        self.launchers = ['Start - Plugin - Stracker - L1.cmd',
+                          'Start - Plugin - Stracker - L2.cmd',
+                          'Start - Plugin - Stracker - L3.cmd']
+        self.launcher = self.launchers[level-1]
+
+    def run(self):
+        os.chdir(SERVER_PATH)
 
 
 class RollingStartPlugin(ServerApp):
     def __init__(self):
         super(RollingStartPlugin, self).__init__()
+        self.directory = 'rollingstart'
         self.executable = 'RollingStartPlugin.exe'
         self.launcher = 'Start - Plugin - Rolling L2.bat'
+
+    def run(self):
+        run_dir = os.path.join(PLUGIN_PATH, self.directory)
+        os.chdir(run_dir)
+
+        # Run the Rolling Start Plugin
+        p = subprocess.Popen([self.executable],
+                             close_fds=True,
+                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        time.sleep(1)
+        self.pid = p.pid
 
 
 class CutPlugin(ServerApp):
     def __init__(self):
         super(CutPlugin, self).__init__()
+        self.directory = 'cut'
         self.executable = 'ACCutDetectorPlugin.exe'
         self.launcher = 'Start - Plugin - Cut - L1.bat'
 
+    def run(self):
+        run_dir = os.path.join(PLUGIN_PATH, self.directory)
+        os.chdir(run_dir)
+
+        # Run the Cut Plugin
+        p = subprocess.Popen([self.executable],
+                             close_fds=True,
+                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        time.sleep(1)
+        self.pid = p.pid
+
 
 class ACRLServer(object):
-    def __init__(self, http_port):
+    def __init__(self, http_port, run_cut_plugin=False, run_rolling_start_plugin=False, run_stracker=False):
         self.http_port = http_port
+        self.run_cut_plugin = run_cut_plugin
+        self.run_rolling_start_plugin = run_rolling_start_plugin
+        self.run_stracker = run_stracker
+
+        self.cut_plugin = None
+        self.rolling_start_plugin = None
+        self.stracker = None
+        self.ac_server = None
 
     # Start the server processes
     def start_server(self):
-        os.chdir(SERVER_PATH)
-        # If Eu (or if the bat file exists, run stracker)
-        if os.path.isfile(os.path.join(SERVER_PATH, 'start-stracker.cmd')):
-            p = subprocess.Popen(['start-stracker.cmd'],
-                                 close_fds=True,
-                                 creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-        time.sleep(1)
-        server_pids[STRACKER_EXE] = p.pid
+        # Keep track of the app level for using launcher scripts in order
+        app_level = 1
 
-        # Run the ACRL Plugin for GT3
-        # TODO: update so gt3 timing values are not hardcoded in
-        p = subprocess.Popen([ACRL_PLUGIN_EXE, '60', '15', 'standing'],
-                             close_fds=True,
-                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-        time.sleep(1)
-        server_pids[ACRL_PLUGIN_EXE] = p.pid
+        if self.run_cut_plugin:
+            self.cut_plugin = CutPlugin()
+            self.cut_plugin.run_launcher()
+            app_level += 1
 
-        # Run ACCutDetectorPlugin.exe in CutPlugin folder
-        os.chdir(CUT_PLUGIN_PATH)
-        p = subprocess.Popen([CUT_PLUGIN_EXE],
-                             close_fds=True,
-                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-        time.sleep(1)
-        server_pids[CUT_PLUGIN_EXE] = p.pid
-        os.chdir(SERVER_PATH)
+        if self.run_rolling_start_plugin:
+            self.rolling_start_plugin = RollingStartPlugin()
+            self.rolling_start_plugin.run_launcher()
+            app_level += 1
 
-        # Create a new acserver log file with a timestamp
-        log_name = 'acServer.{}.log'.format(time.strftime("%m.%d.%Y.%H.%M.%S"))
-        # Run the AC Server
-        p = subprocess.Popen(['{} 1> {} 2>&1'.format(AC_SERVER_EXE, log_name)],
-                             close_fds=True,
-                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-        time.sleep(1)
-        server_pids[AC_SERVER_EXE] = p.pid
+        if self.run_stracker:
+            self.stracker = Stracker(level=app_level)
+            self.stracker.run_launcher()
+
+        self.ac_server = ACServer()
+        self.ac_server.run_launcher()
 
         # Return True if server is running (may be misleading)
-        return server_running()
-
-    # Kills all processes with the name specified
-    def kill_process(self, pid):
-        p = subprocess.Popen(["cmd", "/C", "taskkill", "/PID", str(pid), "/f"], stdout=subprocess.PIPE)
+        return self.server_running()
 
     # Fragile if you rely on the PID file. Scorched earth, motherfucker.
     def kill_server(self):
