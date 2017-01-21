@@ -9,11 +9,13 @@ import argparse
 import logging
 import os
 import shutil
+import multiprocessing
 import subprocess
 import time
 
+import bottle
 # import gspread
-from bottle import Bottle, run, request, template, view
+from bottle import request, template, view
 
 
 # Configuration paths and files
@@ -330,6 +332,17 @@ class ACRLServer(object):
     ------------------------------------------------------------------------
     """
 
+    def run_http(self):
+        self._bottle_app = bottle.Bottle()
+        self.setup_routes()
+        self._http_process = multiprocessing.Process(target=bottle.run,
+                                                     args=(self._bottle_app, ),
+                                                     kwargs={'port': self.http_port})
+        self._http_process.start()
+
+    def kill_http(self):
+        self._http_process.terminate()
+
     def setup_routes(self):
         """
         Setup the page routes for the methods below
@@ -409,19 +422,10 @@ if __name__ == "__main__":
     # EXAMPLE of how to start up multiple configured http server instances
     server1 = ACRLServer(region='EU1', http_port=web_server_port)
     server2 = ACRLServer(region='EU2', http_port=web_server_port+2)
-    server1.run()
-    server2.run()
+    server1.run_http()
+    server2.run_http()
 
     time.sleep(20)
 
-    server1.kill()
-    server2.kill()
-
-
-
-"""
-Start normally, with a flag to indicate if it should just check a normal location
-otherwise, start and wait for some other mode of config
-
-add methods to add server, remove server...
-"""
+    server1.kill_http()
+    server2.kill_http()
