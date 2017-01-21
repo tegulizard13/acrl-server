@@ -1,7 +1,5 @@
-# TODO: Process handling using PIDs to support multiple servers on one machine
 # TODO: Fix logging so that it works correctly, it isn't logging now...
 # TODO: Links to race log files for after the race.
-# TODO: Multi-server support
 
 # pip install bottle, requests, gspread
 """
@@ -21,14 +19,12 @@ from bottle import Bottle, run, request, template, view
 # Configuration paths and files
 SERVER_PATH = 'C:\Users\Administrator\Desktop'
 PLUGIN_DIR = 'Plugins'
+CONFIG_DIR = 'cfg'
+STAGING_DIR = os.path.join(CONFIG_DIR, 'staging')
 
 REGION_NA = 'NA'
 REGION_EU = 'EU'
 
-
-PRESETS_PATH = os.path.join(SERVER_PATH, 'presets')
-STAGING_PATH = os.path.join(PRESETS_PATH, 'staging')
-CONFIG_PATH = os.path.join(SERVER_PATH, 'cfg')
 ENTRY_LIST = 'entry_list.ini'
 SERVER_CFG = 'server_cfg.ini'
 
@@ -225,7 +221,6 @@ class ACRLServer(object):
         self._http_process = None
 
     # Start the server processes
-    # TODO: start stracker using process
     def start_server(self):
         # Keep track of the app level for using launcher scripts in order
         app_level = 1
@@ -297,10 +292,10 @@ class ACRLServer(object):
 
         return server_is_running
 
+    '''
     # Returns new entry list as a string
     # TODO: Finish implementing at some point
     def current_entry_list(self, checkin_url):
-        '''
         # Get the check-in list from google sheets. use gspread
         checkin_list = []  # list of username strings who checked in
 
@@ -320,8 +315,6 @@ class ACRLServer(object):
             entries.append(racers[checked_in])
 
         return "\n\n".join(entries)
-        '''
-        pass
 
     # Writes unsafely to the current config directory
     def write_current_entry_list(self, entry_list_string):
@@ -330,7 +323,7 @@ class ACRLServer(object):
         server_config_dir_name = output[0]
         with open(os.path.join(PRESETS_PATH, server_config_dir_name, ENTRY_LIST), 'w') as entry_list_ini:
             entry_list_ini.write(entry_list_string)
-
+    '''
     """
     ------------------------------------------------------------------------
     Ideally I would decorate these methods. These are page routes and setup.
@@ -370,34 +363,34 @@ class ACRLServer(object):
         entry_list_generated = False
         server_cfg_written = False
         try:
-            if not os.path.exists(STAGING_PATH):
-                os.makedirs(STAGING_PATH)
+            staging_path = os.path.join(SERVER_PATH, self.base_dir, STAGING_DIR)
+            if not os.path.exists(staging_path):
+                os.makedirs(staging_path)
 
             server_cfg = request.files.get('server_cfg')
             entry_list = request.files.get('entry_list')
 
             # Attempt to write the uploaded server config to the staging directory
-            server_config_path = os.path.join(STAGING_PATH, server_cfg.filename)
+            server_config_path = os.path.join(staging_path, server_cfg.filename)
             server_cfg.save(server_config_path, overwrite=True)
             server_cfg_written = True
 
             # Attempt to write the uploaded entry list to the staging directory
-            entry_list_path = os.path.join(STAGING_PATH, entry_list.filename)
+            entry_list_path = os.path.join(staging_path, entry_list.filename)
             entry_list.save(entry_list_path, overwrite=True)
             entry_list_generated = True
 
             # Copy the new configs to the active config directory
             shutil.copy(server_config_path,
-                        os.path.join(CONFIG_PATH, SERVER_CFG))
+                        os.path.join(SERVER_PATH, self.base_dir, CONFIG_DIR, SERVER_CFG))
             shutil.copy(entry_list_path,
-                        os.path.join(CONFIG_PATH, ENTRY_LIST))
+                        os.path.join(SERVER_PATH, self.base_dir, CONFIG_DIR, ENTRY_LIST))
         except Exception as e:
             logging.exception(e.message)
             logging.exception('Continuing to load, new uploads required.')
         return template('upload_status',
                         server_cfg_written=server_cfg_written,
                         entry_list_generated=entry_list_generated)
-
 
 if __name__ == "__main__":
     # Get the args
