@@ -20,7 +20,7 @@ from bottle import Bottle, run, request, template, view
 
 # Configuration paths and files
 SERVER_PATH = 'C:\Users\Administrator\Desktop'
-PLUGIN_PATH = os.path.join(SERVER_PATH, 'Plugins')
+PLUGIN_DIR = 'Plugins'
 
 REGION_NA = 'NA'
 REGION_EU = 'EU'
@@ -66,10 +66,8 @@ class ServerApp(object):
     """
     Base class for applications running on the host device.
     """
-    def __init__(self, region, base_dir=None):
+    def __init__(self, base_dir=None):
         """
-        :param region: NA or EU, used to determine NA AWS or Rackservice
-
         :keyword base_dir: NA, or EU1, EU2, EU3, EU4 depending. Otherwise figure it out
 
         :var base_path: Absolute path to the server base directory
@@ -79,6 +77,7 @@ class ServerApp(object):
         :var launcher: Windows shell script in _base_path which can be used to run the app
         """
 
+        # TODO: determine the next dir automagically
         if not base_dir:
             # list the dirs on the desktop to see how many servers there are
             # make a new folder via a copy or something?
@@ -131,13 +130,13 @@ class ServerApp(object):
 
 
 class ACServer(ServerApp):
-    def __init__(self):
-        super(ACServer, self).__init__()
+    def __init__(self, base_dir):
+        super(ACServer, self).__init__(base_dir)
         self.executable = 'acServer.exe'
         self.launcher = 'Start - Server.bat'
 
     def run(self):
-        os.chdir(SERVER_PATH)
+        os.chdir(self.base_path)
 
         # get a timestamp for the log files
         log_suffix = '{}.log'.format(time.strftime("%m.%d.%Y.%H.%M.%S"))
@@ -154,8 +153,8 @@ class ACServer(ServerApp):
 
 
 class Stracker(ServerApp):
-    def __init__(self, level=1):
-        super(Stracker, self).__init__()
+    def __init__(self, base_dir, level=1):
+        super(Stracker, self).__init__(base_dir)
         self.executable = 'stracker.exe'
         self.launchers = ['Start - Plugin - Stracker - L1.cmd',
                           'Start - Plugin - Stracker - L2.cmd',
@@ -163,18 +162,19 @@ class Stracker(ServerApp):
         self.launcher = self.launchers[level-1]
 
     def run(self):
-        os.chdir(SERVER_PATH)
+        # TODO: make a real run method here
+        os.chdir(self.base_path)
 
 
 class RollingStartPlugin(ServerApp):
-    def __init__(self):
-        super(RollingStartPlugin, self).__init__()
+    def __init__(self, base_dir):
+        super(RollingStartPlugin, self).__init__(base_dir)
         self.directory = 'rollingstart'
         self.executable = 'RollingStartPlugin.exe'
         self.launcher = 'Start - Plugin - Rolling L2.bat'
 
     def run(self):
-        run_dir = os.path.join(PLUGIN_PATH, self.directory)
+        run_dir = os.path.join(self.base_path, PLUGIN_DIR, self.directory)
         os.chdir(run_dir)
 
         # Run the Rolling Start Plugin
@@ -186,14 +186,14 @@ class RollingStartPlugin(ServerApp):
 
 
 class CutPlugin(ServerApp):
-    def __init__(self):
-        super(CutPlugin, self).__init__()
+    def __init__(self, base_dir):
+        super(CutPlugin, self).__init__(base_dir)
         self.directory = 'cut'
         self.executable = 'ACCutDetectorPlugin.exe'
         self.launcher = 'Start - Plugin - Cut - L1.bat'
 
     def run(self):
-        run_dir = os.path.join(PLUGIN_PATH, self.directory)
+        run_dir = os.path.join(self.base_path, PLUGIN_DIR, self.directory)
         os.chdir(run_dir)
 
         # Run the Cut Plugin
@@ -205,7 +205,8 @@ class CutPlugin(ServerApp):
 
 
 class ACRLServer(object):
-    def __init__(self, http_port, run_cut_plugin=False, run_rolling_start_plugin=False, run_stracker=False):
+    def __init__(self, base_dir, http_port, run_cut_plugin=False, run_rolling_start_plugin=False, run_stracker=False):
+        self.base_dir = base_dir
         self.http_port = http_port
         self.run_cut_plugin = run_cut_plugin
         self.run_rolling_start_plugin = run_rolling_start_plugin
@@ -216,7 +217,7 @@ class ACRLServer(object):
         self.stracker = None
         self.ac_server = None
 
-        self.bottle_app = None
+        self._bottle_app = None
         self._http_process = None
 
     # Start the server processes
@@ -226,20 +227,21 @@ class ACRLServer(object):
         app_level = 1
 
         if self.run_cut_plugin:
-            self.cut_plugin = CutPlugin()
+            self.cut_plugin = CutPlugin(base_dir=self.base_dir)
             self.cut_plugin.run()
             app_level += 1
 
         if self.run_rolling_start_plugin:
-            self.rolling_start_plugin = RollingStartPlugin()
+            self.rolling_start_plugin = RollingStartPlugin(base_dir=self.base_dir)
             self.rolling_start_plugin.run()
             app_level += 1
 
         if self.run_stracker:
-            self.stracker = Stracker(level=app_level)
+            self.stracker = Stracker(base_dir=self.base_dir, level=app_level)
             self.stracker.run_launcher()
 
-        self.ac_server = ACServer()
+        time.sleep(1)
+        self.ac_server = ACServer(base_dir=self.base_dir)
         self.ac_server.run()
 
         # Return True if server is running
@@ -332,10 +334,13 @@ class ACRLServer(object):
     """
 
     def setup_routes(self):
-        self.bottle_app.route('/', [GET], self.status)
-        self.bottle_app.route('/about', [GET], self.home)
-        self.bottle_app.route('/control', [POST], self.control_server)
-        self.bottle_app.route('/upload', [POST], self.upload_configs)
+        """
+        Setup the page routes for the methods below
+        """
+        self._bottle_app.route('/', [GET], self.status)
+        self._bottle_app.route('/about', [GET], self.home)
+        self._bottle_app.route('/control', [POST], self.control_server)
+        self._bottle_app.route('/upload', [POST], self.upload_configs)
 
     # Check the status and generate an in-depth status page, with links to do things
     @view('status')
@@ -404,10 +409,16 @@ if __name__ == "__main__":
     if args.port:
         web_server_port = args.port
 
-    # TODO: allow multiple servers to run
-    # Our server
-    acrl = Bottle()
-    run(acrl, host='0.0.0.0', port=web_server_port)
+    # EXAMPLE of how to start up multiple configured http server instances
+    server1 = ACRLServer(region='EU1', http_port=web_server_port)
+    server2 = ACRLServer(region='EU2', http_port=web_server_port+2)
+    server1.run()
+    server2.run()
+
+    time.sleep(20)
+
+    server1.kill()
+    server2.kill()
 
 
 
