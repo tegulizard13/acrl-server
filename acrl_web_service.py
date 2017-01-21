@@ -155,15 +155,19 @@ class ACServer(ServerApp):
 class Stracker(ServerApp):
     def __init__(self, base_dir, level=1):
         super(Stracker, self).__init__(base_dir)
+        self.directory = 'stracker'
         self.executable = 'stracker.exe'
-        self.launchers = ['Start - Plugin - Stracker - L1.cmd',
-                          'Start - Plugin - Stracker - L2.cmd',
-                          'Start - Plugin - Stracker - L3.cmd']
-        self.launcher = self.launchers[level-1]
+        self.level = level
+        self.launcher = 'Start - Plugin - Stracker - L{}.cmd'.format(self.level)
 
     def run(self):
-        # TODO: make a real run method here
-        os.chdir(self.base_path)
+        os.chdir(self.base_path, PLUGIN_DIR, self.directory)
+        # Run the Stracker Plugin
+        p = subprocess.Popen([self.executable, '--stracker_ini', 'stracker-forwarded-l{}.ini'.format(self.level)],
+                             close_fds=True,
+                             creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        time.sleep(1)
+        self.pid = p.pid
 
 
 class RollingStartPlugin(ServerApp):
@@ -238,7 +242,7 @@ class ACRLServer(object):
 
         if self.run_stracker:
             self.stracker = Stracker(base_dir=self.base_dir, level=app_level)
-            self.stracker.run_launcher()
+            self.stracker.run()
 
         time.sleep(1)
         self.ac_server = ACServer(base_dir=self.base_dir)
