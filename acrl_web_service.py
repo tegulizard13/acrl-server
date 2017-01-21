@@ -90,16 +90,6 @@ class ServerApp(object):
         self.executable = None
         self.launcher = None
 
-    '''
-    @property
-    def executable_path(self):
-        path_parts = [self.base_path,
-                      self.directory if self.directory else '',
-                      self.executable]
-        full_path = os.path.join(*path_parts)
-        return full_path
-    '''
-
     @property
     def running(self):
         application_running = False
@@ -226,7 +216,11 @@ class ACRLServer(object):
         self.stracker = None
         self.ac_server = None
 
+        self.bottle_app = None
+        self._http_process = None
+
     # Start the server processes
+    # TODO: start stracker using process
     def start_server(self):
         # Keep track of the app level for using launcher scripts in order
         app_level = 1
@@ -331,66 +325,69 @@ class ACRLServer(object):
         with open(os.path.join(PRESETS_PATH, server_config_dir_name, ENTRY_LIST), 'w') as entry_list_ini:
             entry_list_ini.write(entry_list_string)
 
+    """
+    ------------------------------------------------------------------------
+    Ideally I would decorate these methods. These are page routes and setup.
+    ------------------------------------------------------------------------
+    """
 
+    def setup_routes(self):
+        self.bottle_app.route('/', [GET], self.status)
+        self.bottle_app.route('/about', [GET], self.home)
+        self.bottle_app.route('/control', [POST], self.control_server)
+        self.bottle_app.route('/upload', [POST], self.upload_configs)
 
-@acrl.route('/about', method=GET)
-def home():
-    return template('about')
+    # Check the status and generate an in-depth status page, with links to do things
+    @view('status')
+    def status(self):
+        return dict(server_running=self.server_running())
 
+    def home(self):
+        return template('about')
 
-# Check the status and generate an in-depth status page, with links to do things
-@acrl.route('/', method=GET)
-@view('status')
-def status():
-    return dict(server_running=server_running())
+    def control_server(self):
+        action = request.forms.get('action')
+        if action == START:
+            self.start_server()
+        elif action == STOP:
+            self.kill_server()
+        elif action == RESTART:
+            self.restart_server()
+        time.sleep(1)
+        return template('redirect_home')
 
+    # TODO: add better exception handling
+    def upload_configs(self):
+        entry_list_generated = False
+        server_cfg_written = False
+        try:
+            if not os.path.exists(STAGING_PATH):
+                os.makedirs(STAGING_PATH)
 
-@acrl.route('/control', method=POST)
-def control_server():
-    action = request.forms.get('action')
-    if action == START:
-        start_server()
-    elif action == STOP:
-        kill_server()
-    elif action == RESTART:
-        restart_server()
-    time.sleep(1)
-    return template('redirect_home')
+            server_cfg = request.files.get('server_cfg')
+            entry_list = request.files.get('entry_list')
 
+            # Attempt to write the uploaded server config to the staging directory
+            server_config_path = os.path.join(STAGING_PATH, server_cfg.filename)
+            server_cfg.save(server_config_path, overwrite=True)
+            server_cfg_written = True
 
-# TODO: add better exception handling
-@acrl.route('/upload', method=POST)
-def upload_configs():
-    entry_list_generated = False
-    server_cfg_written = False
-    try:
-        if not os.path.exists(STAGING_PATH):
-            os.makedirs(STAGING_PATH)
+            # Attempt to write the uploaded entry list to the staging directory
+            entry_list_path = os.path.join(STAGING_PATH, entry_list.filename)
+            entry_list.save(entry_list_path, overwrite=True)
+            entry_list_generated = True
 
-        server_cfg = request.files.get('server_cfg')
-        entry_list = request.files.get('entry_list')
-
-        # Attempt to write the uploaded server config to the staging directory
-        server_config_path = os.path.join(STAGING_PATH, server_cfg.filename)
-        server_cfg.save(server_config_path, overwrite=True)
-        server_cfg_written = True
-
-        # Attempt to write the uploaded entry list to the staging directory
-        entry_list_path = os.path.join(STAGING_PATH, entry_list.filename)
-        entry_list.save(entry_list_path, overwrite=True)
-        entry_list_generated = True
-
-        # Copy the new configs to the active config directory
-        shutil.copy(server_config_path,
-                    os.path.join(CONFIG_PATH, SERVER_CFG))
-        shutil.copy(entry_list_path,
-                    os.path.join(CONFIG_PATH, ENTRY_LIST))
-    except Exception as e:
-        logging.exception(e.message)
-        logging.exception('Continuing to load, new uploads required.')
-    return template('upload_status',
-                    server_cfg_written=server_cfg_written,
-                    entry_list_generated=entry_list_generated)
+            # Copy the new configs to the active config directory
+            shutil.copy(server_config_path,
+                        os.path.join(CONFIG_PATH, SERVER_CFG))
+            shutil.copy(entry_list_path,
+                        os.path.join(CONFIG_PATH, ENTRY_LIST))
+        except Exception as e:
+            logging.exception(e.message)
+            logging.exception('Continuing to load, new uploads required.')
+        return template('upload_status',
+                        server_cfg_written=server_cfg_written,
+                        entry_list_generated=entry_list_generated)
 
 
 if __name__ == "__main__":
