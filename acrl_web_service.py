@@ -1,7 +1,6 @@
 # TODO: Fix logging so that it works correctly, it isn't logging now...
 # TODO: Links to race log files for after the race.
-
-# pip install bottle, requests, gspread
+# pip install bottle, requests
 """
 Bottle server with api methods for starting everything
 """
@@ -14,7 +13,6 @@ import subprocess
 import time
 
 import bottle
-# import gspread
 from bottle import request, template, view
 
 
@@ -61,14 +59,13 @@ root_logger.addHandler(ch)
 
 
 class ServerApp(object):
-    """
-    Base class for applications running on the host device.
-    """
     def __init__(self, base_dir=None):
         """
-        :keyword base_dir: NA, or EU1, EU2, EU3, EU4 depending. Otherwise figure it out
+        Base class for applications running on the host device.
 
-        :var base_path: Absolute path to the server base directory
+        :param base_dir: Folder name EU1, EU2, etc... NA1, NA2, etc... containing acserver.exe
+
+        :var base_dir: Absolute path to the server base directory
         :var pid: process Id for the process if running
         :var directory: Path to the application executable directory relative to _base_path
         :var executable: Executable file name
@@ -156,10 +153,14 @@ class Stracker(ServerApp):
         self.directory = 'stracker'
         self.executable = 'stracker.exe'
         self.level = level
-        self.launcher = 'Start - Plugin - Stracker - L{}.cmd'.format(self.level)
+
+    @property
+    def launcher(self):
+        return 'Start - Plugin - Stracker - L{}.cmd'.format(self.level)
 
     def run(self):
-        os.chdir(self.base_path, PLUGIN_DIR, self.directory)
+        run_dir = os.path.join(self.base_path, PLUGIN_DIR, self.directory)
+        os.chdir(run_dir)
         # Run the Stracker Plugin
         p = subprocess.Popen([self.executable, '--stracker_ini', 'stracker-forwarded-l{}.ini'.format(self.level)],
                              close_fds=True,
@@ -207,61 +208,52 @@ class CutPlugin(ServerApp):
 
 
 class ACRLServer(object):
-    def __init__(self, base_dir, http_port, run_cut_plugin=False, run_rolling_start_plugin=False, run_stracker=False):
+    def __init__(self, base_dir, http_port, plugins=None):
+        """
+        ACRL Server instance representing a single game server and its plugins
+
+        :param base_dir: Folder name EU1, EU2, etc... NA1, NA2, etc... containing acserver.exe
+        :param http_port: Port the server should use for http
+        :param plugins: List of plugin class types in the order they should be started.
+
+        :var apps: List of application instances, once start_server() has been called
+        :var _plugins: list of plugin class types in the order they should be started
+        :var _bottle_app: bottle app instance for this game server
+        :var _http_process: Python bottle app run process for this game server.
+        """
+
         self.base_dir = base_dir
         self.http_port = http_port
-        self.run_cut_plugin = run_cut_plugin
-        self.run_rolling_start_plugin = run_rolling_start_plugin
-        self.run_stracker = run_stracker
-
-        self.cut_plugin = None
-        self.rolling_start_plugin = None
-        self.stracker = None
-        self.ac_server = None
+        self.apps = []
+        self._plugins = plugins if plugins else []
 
         self._bottle_app = None
         self._http_process = None
 
     # Start the server processes
     def start_server(self):
-        # Keep track of the app level for using launcher scripts in order
-        app_level = 1
+        for index, Plugin in enumerate(self._plugins):
+            # Create an instance of the plugin class type in the list. Keep track of it.
+            self.apps.append(Plugin(base_dir=self.base_dir))
 
-        if self.run_cut_plugin:
-            self.cut_plugin = CutPlugin(base_dir=self.base_dir)
-            self.cut_plugin.run()
-            app_level += 1
+            # Stracker needs an additional arg, so if this plugin is Stracker than set it.
+            if type(self.apps[-1]) is Stracker:
+                self.apps[-1].level = index
 
-        if self.run_rolling_start_plugin:
-            self.rolling_start_plugin = RollingStartPlugin(base_dir=self.base_dir)
-            self.rolling_start_plugin.run()
-            app_level += 1
-
-        if self.run_stracker:
-            self.stracker = Stracker(base_dir=self.base_dir, level=app_level)
-            self.stracker.run()
-
+            self.apps[-1].run()
         time.sleep(1)
-        self.ac_server = ACServer(base_dir=self.base_dir)
-        self.ac_server.run()
+
+        # We will kill processes in order later, so add the game server to the start of the apps list
+        self.apps = [ACServer(base_dir=self.base_dir)] + self.apps
+        self.apps[0].run()
 
         # Return True if server is running
         return self.server_running()
 
     # Attempt to kill all server applications by PID
     def kill_server(self):
-        # Kill race server
-        if self.ac_server:
-            self.ac_server.kill()
-        # Kill cut detector
-        if self.cut_plugin:
-            self.cut_plugin.kill()
-        # Kill rolling start plugin
-        if self.rolling_start_plugin:
-            self.rolling_start_plugin.kill()
-        # Kill STracker
-        if self.stracker:
-            self.stracker.kill()
+        for app in self.apps:
+            app.kill()
         time.sleep(1)
 
         # Return True if the server is stopped
@@ -279,53 +271,15 @@ class ACRLServer(object):
         :return: Boolean True if all required applications have PIDs in tasklist output
         """
         server_is_running = True
-        # Check race server state
-        if self.ac_server:
-            server_is_running = server_is_running and self.ac_server.running
-        # Check cut detector state
-        if self.cut_plugin:
-            server_is_running = server_is_running and self.cut_plugin.running
-        # Check rolling start plugin state
-        if self.rolling_start_plugin:
-            server_is_running = server_is_running and self.rolling_start_plugin.running
-        # Check STracker state
-        if self.stracker:
-            server_is_running = server_is_running and self.stracker.running
+
+        for app in self.apps:
+            server_is_running = server_is_running and app.running
+
+        all_running = len(self.apps) == len(self._plugins) + 1
+        server_is_running = server_is_running and all_running
 
         return server_is_running
 
-    '''
-    # Returns new entry list as a string
-    # TODO: Finish implementing at some point
-    def current_entry_list(self, checkin_url):
-        # Get the check-in list from google sheets. use gspread
-        checkin_list = []  # list of username strings who checked in
-
-        credentials = "google credentials"
-        gc = gspread.authorize(credentials)
-        # Open a worksheet from spreadsheet with one shot
-        wks = gc.open("Where is the money Lebowski?").sheet1
-        wks.update_acell('B2', "it's down there somewhere, let me take another look.")
-        # Fetch a cell range
-        cell_list = wks.range('A1:B7')
-
-        # Get the full entry list of all members (also store as a google doc?)
-        racers = {'example_racer_name': 'full_entry_as_string'}
-
-        entries = []
-        for checked_in in checkin_list:
-            entries.append(racers[checked_in])
-
-        return "\n\n".join(entries)
-
-    # Writes unsafely to the current config directory
-    def write_current_entry_list(self, entry_list_string):
-        p1 = subprocess.Popen(["cmd", "/C", "DIR /B", PRESETS_PATH], stdout=subprocess.PIPE)
-        output = sorted(p1.communicate()[0])
-        server_config_dir_name = output[0]
-        with open(os.path.join(PRESETS_PATH, server_config_dir_name, ENTRY_LIST), 'w') as entry_list_ini:
-            entry_list_ini.write(entry_list_string)
-    '''
     """
     ------------------------------------------------------------------------
     Ideally I would decorate these methods. These are page routes and setup.
@@ -419,9 +373,12 @@ if __name__ == "__main__":
     if args.port:
         web_server_port = args.port
 
+    plugins1 = [CutPlugin, RollingStartPlugin, Stracker]
+    plugins2 = [CutPlugin, Stracker]
+
     # EXAMPLE of how to start up multiple configured http server instances
-    server1 = ACRLServer(region='EU1', http_port=web_server_port)
-    server2 = ACRLServer(region='EU2', http_port=web_server_port+2)
+    server1 = ACRLServer(base_dir='EU1', http_port=web_server_port, plugins=plugins1)
+    server2 = ACRLServer(base_dir='EU2', http_port=web_server_port+2, plugins=plugins2)
     server1.run_http()
     server2.run_http()
 
